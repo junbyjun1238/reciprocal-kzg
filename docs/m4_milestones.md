@@ -1,114 +1,91 @@
 # ESP Grant M1-M4 Milestones
 
-## 목표
+## Goal
 
-이번 grant의 목표는 reciprocal backend를 **실제 KZG 기반 라이브러리**로 만들고,
-그 경로를 Sonobe staging 위에 **실제로 연결되는 실험 백엔드**로 올리는 것이다.
+Build the reciprocal backend into a real KZG descriptor-opening library and wire
+that path into the current Sonobe-derived integration flow.
 
-핵심은 연구 메모를 더 쓰는 것이 아니라:
-
-- KZG에 붙는 descriptor-opening 경로를 구현하고
-- Sonobe 쪽 adapter / proof path에 연결하고
-- aggregation / decider까지 이어서
-- 리뷰어가 직접 돌려볼 수 있는 형태로 정리하는 것이다.
-
----
+This milestone plan is implementation-focused. The deliverables are code,
+integration paths, tests, and demo artifacts.
 
 ## M1. KZG Descriptor-Opening Library
 
-### 작업
+### Build
 
-- reciprocal descriptor query를 처리하는 KZG 기반 commitment/opening 라이브러리 구현
-- input commitment, descriptor query, output opening, verification 경로 구현
-- 현재 Pedersen-backed PoC path를 라이브러리 레벨에서 대체할 수 있는 API 구성
+- implement a KZG-backed commitment and opening module for reciprocal descriptor queries
+- implement commit, query, open, and verify paths for the reciprocal input and reduced descriptor
+- expose an API that can replace the current Pedersen-backed PoC path
 
-### 산출물
+### Deliverables
 
-- KZG-backed reciprocal commitment/opening 모듈
-- descriptor query를 받는 open / verify API
-- unit test와 worked-instance test
+- KZG-backed reciprocal commitment and opening module
+- open and verify API for descriptor queries
+- unit tests and worked-instance tests
 
-### 완료 기준
+### Acceptance
 
-- reciprocal input을 KZG로 commit할 수 있다
-- reduced descriptor query에 대해 opening proof를 생성할 수 있다
-- verifier가 same output / wrong output / wrong descriptor를 구분해서 reject할 수 있다
-- 현재 PoC example이 더 이상 Pedersen-only certificate path에만 의존하지 않는다
-
----
+- reciprocal inputs can be committed under the new KZG path
+- a reduced-descriptor query can produce an opening proof
+- verification rejects wrong output, wrong descriptor, and wrong opening
+- the example flow no longer depends on the Pedersen-only reciprocal opening path
 
 ## M2. Sonobe Adapter Integration
 
-### 작업
+### Build
 
-- KZG-backed reciprocal proof path를 Sonobe staging adapter에 연결
-- 현재 reciprocal statement 경계를 실제 integration flow에서 소비되게 정리
-- example / test 경로를 새 라이브러리 기준으로 교체
+- wire the KZG-backed reciprocal proof path into the current adapter flow
+- replace the current PoC opening boundary in the example and integration paths
+- update integration tests so they exercise the new library path directly
 
-### 산출물
+### Deliverables
 
-- reciprocal adapter의 KZG-backed path
-- integration test 갱신
-- example runner 갱신
+- reciprocal adapter path backed by the KZG library
+- updated integration tests
+- updated example runner
 
-### 완료 기준
+### Acceptance
 
-- Sonobe staging 위에서 reciprocal statement가 새 라이브러리 경로로 생성된다
-- integration test가 새 proof path를 직접 사용한다
-- malformed output / wrong descriptor / wrong opening이 integration 경로에서 reject된다
-- 리뷰어가 example 하나로 새 경로를 직접 실행해볼 수 있다
+- reciprocal statements are generated through the new library path
+- integration tests exercise the new proof path directly
+- malformed output, wrong descriptor, and wrong opening are rejected inside the integrated path
+- the example runner demonstrates the new flow end to end
 
----
+## M3. Aggregation and Decider Path
 
-## M3. 4-Coordinate Aggregation and Decider
+### Build
 
-### 작업
+- implement a real aggregation path for the `F^4` reciprocal outputs
+- upgrade the current helper-style offchain decider into a library entry point over the aggregated proof object
+- connect aggregation, opening checks, and fold linkage in one verifier path
 
-- `F^4` output을 하나의 verification path로 묶는 aggregation 구현
-- aggregated reciprocal proof를 소비하는 decider path 구성
-- 현재 helper 성격의 offchain decider를 실제 library entry point 수준으로 끌어올림
+### Deliverables
 
-### 산출물
-
-- 4-coordinate aggregation 구현
+- 4-coordinate aggregation path
 - aggregated proof verification entry point
-- decider path 테스트
+- decider-path tests
 
-### 완료 기준
+### Acceptance
 
-- verifier가 좌표별 helper 조합이 아니라 aggregated reciprocal proof를 직접 받는다
-- decider entry point 하나로 relation / opening / fold linkage를 체크할 수 있다
-- example과 test가 aggregated path를 기준으로 동작한다
-
----
+- the verifier consumes an aggregated reciprocal proof object rather than ad hoc helper outputs
+- one decider entry point checks relation consistency, opening consistency, and fold linkage
+- the example and tests use the aggregated path by default
 
 ## M4. Hardening and Grant Demo Package
 
-### 작업
+### Build
 
-- 새 KZG path 기준 benchmark 정리
-- naive baseline 대비 specialized path 비교를 새 경로에 맞춰 다시 측정
-- reviewer/demo용 실행 문서와 예제 정리
+- refresh the benchmark package around the KZG-backed path
+- rerun the naive-versus-specialized comparison with the updated backend path
+- prepare reviewer-facing run instructions and a clean end-to-end demo flow
 
-### 산출물
+### Deliverables
 
-- 최신 benchmark snapshot
-- reviewer용 실행 문서
-- end-to-end demo 커맨드
+- refreshed benchmark snapshot
+- reviewer run guide
+- end-to-end demo command set
 
-### 완료 기준
+### Acceptance
 
-- 한 번의 실행으로 reciprocal backend demo를 재현할 수 있다
-- benchmark 표가 KZG-backed path 기준으로 갱신된다
-- 리뷰어가 어떤 코드가 새 라이브러리이고 어떤 경로가 Sonobe integration인지 바로 따라갈 수 있다
-
----
-
-## 메모
-
-이 문서의 M1-M4는 구현 마일스톤이다.
-
-- M1은 라이브러리를 만든다
-- M2는 Sonobe에 붙인다
-- M3는 aggregation / decider로 묶는다
-- M4는 리뷰와 데모가 가능하게 다듬는다
+- a reviewer can run the main demo flow from the repository without extra interpretation
+- the checked-in benchmark snapshot reflects the KZG-backed path
+- the repo clearly shows which code is the library, which path is the integration flow, and which artifacts are benchmark outputs

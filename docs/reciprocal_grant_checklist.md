@@ -155,7 +155,7 @@ ESP grant용 PoC 기준으로 정리한 체크리스트다.
 
 - `crates/ivc/src/compilers/cyclefold/adapters/nova.rs`
 - `docs/reciprocal_poc.md`
-- `docs/reciprocal_snapshot.csv`
+- `../benchmark/reciprocal_snapshot.csv`
 
 완료 기준:
 

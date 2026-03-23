@@ -2,8 +2,11 @@
 
 ## What This Is
 
-This repository contains an experimental reciprocal-folding PoC built on top of
-the current Sonobe `staging` codebase.
+This repository contains an experimental reciprocal-folding PoC built in a
+Sonobe-derived workspace.
+
+The repository name reflects the target KZG direction. The checked-in
+implementation described in this document remains Pedersen-backed today.
 
 The PoC is intentionally narrow:
 
@@ -21,10 +24,10 @@ It is **not** yet a full reciprocal folding scheme integration into
 Fiat-Shamir security.
 
 For the concrete "what must be added next for the ESP grant PoC" checklist, see
-`docs/reciprocal_grant_checklist.md`.
+`reciprocal_grant_checklist.md`.
 
 For the current paper draft that this PoC is based on, see
-`docs/core_paper/reciprocal_fold_note.pdf`.
+`core_paper/reciprocal_fold_note.pdf`.
 
 ## What Was Added
 
@@ -160,7 +163,8 @@ The example runner now instantiates the reciprocal circuits from the worked
 seed descriptor, builds an opening-aware reciprocal statement, runs the minimal
 offchain decider, and then prints the benchmark snapshot rows used by the PoC.
 
-The latest checked-in CSV snapshot is at `docs/reciprocal_snapshot.csv`.
+The canonical checked-in CSV snapshot is at
+`../benchmark/reciprocal_snapshot.csv`.
 
 The reciprocal kernel benchmark is intentionally separate from the Nova/CycleFold
 snapshot. It measures the algebraic backend more directly:
