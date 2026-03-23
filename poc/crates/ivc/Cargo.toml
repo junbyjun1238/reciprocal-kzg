@@ -1,0 +1,37 @@
+[package]
+name = "sonobe-ivc"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ark-crypto-primitives = { workspace = true, features = ["constraints", "sponge", "crh"] }
+ark-ec = { workspace = true }
+ark-ff = { workspace = true, features = ["asm"] }
+ark-r1cs-std = { workspace = true }
+ark-relations = { workspace = true }
+ark-serialize = { workspace = true }
+ark-std = { workspace = true, features = ["getrandom"] }
+num-bigint = { workspace = true, features = ["rand"] }
+sha3 = { workspace = true }
+thiserror = { workspace = true }
+
+sonobe-primitives = { workspace = true }
+sonobe-fs = { workspace = true }
+
+[dev-dependencies]
+ark-bn254 = { workspace = true, features = ["curve", "r1cs"] }
+ark-grumpkin = { workspace = true, features = ["r1cs"] }
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies]
+wasm-bindgen-test = { workspace = true }
+
+[features]
+default = []
+parallel = [
+    "sonobe-fs/parallel",
+]

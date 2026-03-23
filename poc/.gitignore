@@ -1,0 +1,7 @@
+/target
+Cargo.lock
+
+*.r1cs
+*.sym
+*.serialized
+*/*.serialized

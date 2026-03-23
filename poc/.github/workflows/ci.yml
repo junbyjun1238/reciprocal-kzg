@@ -1,0 +1,146 @@
+name: CI Check
+on:
+  workflow_dispatch:
+  merge_group:
+  pull_request:
+  push:
+    branches:
+      - main
+env:
+  CARGO_TERM_COLOR: always
+  # Disable incremental compilation.
+  #
+  # Incremental compilation is useful as part of an edit-build-test-edit cycle,
+  # as it lets the compiler avoid recompiling code that hasn't changed. However,
+  # on CI, we're not making small edits; we're almost always building the entire
+  # project from scratch. Thus, incremental compilation on CI actually
+  # introduces *additional* overhead to support making future builds
+  # faster...but no future builds will ever occur in any given CI environment.
+  #
+  # See https://matklad.github.io/2021/09/04/fast-rust-builds.html#ci-workflow
+  # for details.
+  CARGO_INCREMENTAL: 0
+  # Allow more retries for network requests in cargo (downloading crates) and
+  # rustup (installing toolchains). This should help to reduce flaky CI failures
+  # from transient network timeouts or other issues.
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+  # Don't emit giant backtraces in the CI logs.
+  RUST_BACKTRACE: short
+
+# Jobs launched for a PR event cancel the ongoing one for the same workflow + PR,
+# Only retries (of the same run) for a Push event cancel the prior one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    if: github.event.pull_request.draft == false
+    name: Test ${{ matrix.target }} (${{ matrix.features }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # x64: both parallel and no-parallel
+          - target: x86_64-unknown-linux-gnu
+            features: parallel
+            args: "--features parallel"
+          - target: x86_64-unknown-linux-gnu
+            features: no-parallel
+            args: ""
+          # wasm: no-parallel only
+          - target: wasm32-unknown-unknown
+            features: no-parallel
+            args: ""
+          - target: wasm32-wasip2
+            features: no-parallel
+            args: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Install wasm-bindgen-cli
+        if: matrix.target == 'wasm32-unknown-unknown'
+        run: cargo install wasm-bindgen-cli
+      - name: Install wasmtime-cli
+        if: matrix.target == 'wasm32-wasip2'
+        run: cargo install wasmtime-cli
+      - name: Test sonobe-primitives
+        run: cargo test --release -p sonobe-primitives --target ${{ matrix.target }} ${{ matrix.args }}
+      - name: Test sonobe-fs
+        run: cargo test --release -p sonobe-fs --target ${{ matrix.target }} ${{ matrix.args }}
+      - name: Test sonobe-ivc
+        run: cargo test --release -p sonobe-ivc --target ${{ matrix.target }} ${{ matrix.args }}
+      - name: Test documentation examples
+        run: cargo test --doc --target ${{ matrix.target }} ${{ matrix.args }}
+
+  build:
+    if: github.event.pull_request.draft == false
+    name: Build target ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - wasm32-unknown-unknown
+          - wasm32-wasip2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Build sonobe-primitives
+        run: cargo build -p sonobe-primitives --target ${{ matrix.target }}
+      - name: Build sonobe-fs
+        run: cargo build -p sonobe-fs --target ${{ matrix.target }}
+      - name: Build sonobe-ivc
+        run: cargo build -p sonobe-ivc --target ${{ matrix.target }}
+
+  fmt:
+    if: github.event.pull_request.draft == false
+    name: Rustfmt
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Run rustfmt
+        run: cargo fmt --all --check
+
+  clippy:
+    if: github.event.pull_request.draft == false
+    name: Clippy (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - wasm32-unknown-unknown
+          - wasm32-wasip2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets --target ${{ matrix.target }} -- -D warnings
+
+  typos:
+    if: github.event.pull_request.draft == false
+    name: Spell Check with Typos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use typos with config file
+        uses: crate-ci/typos@master
+        with:
+          config: .github/workflows/typos.toml

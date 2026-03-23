@@ -1,0 +1,485 @@
+//! Reciprocal-specific adapter helpers that bridge the PoC wrapper layer into
+//! CycleFold-friendly public input vectors.
+
+use ark_ff::PrimeField;
+use thiserror::Error;
+
+use super::{
+    reciprocal_types::{
+        ReciprocalPublicInstance, ReciprocalSameQLane, ReciprocalTypeError,
+        ReciprocalWitness,
+    },
+    reciprocal_wrapper::{
+        ReciprocalAggregatedProof, ReciprocalWrapper, ReciprocalWrapperError,
+    },
+};
+use sonobe_primitives::{
+    commitments::{CommitmentDef, CommitmentOps},
+    transcripts::Absorbable,
+};
+
+/// Domain tag for reciprocal public instances flattened into public inputs.
+const INSTANCE_DOMAIN_TAG: u64 = 0x5250_4955;
+/// Domain tag for reciprocal aggregated proofs flattened into public inputs.
+const PROOF_DOMAIN_TAG: u64 = 0x5250_5052;
+/// Domain tag for the combined reciprocal adapter statement.
+const STATEMENT_DOMAIN_TAG: u64 = 0x5250_5354;
+
+/// [`ReciprocalCycleFoldStatement`] is the minimal verifier-facing object that
+/// the reciprocal PoC exports to CycleFold entry points.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReciprocalCycleFoldStatement<CM: CommitmentDef> {
+    /// Public reciprocal instance `(C, q, y)`.
+    pub instance: ReciprocalPublicInstance<CM>,
+    /// Single wrapper-level proof object `Pi`.
+    pub proof: ReciprocalAggregatedProof<CM>,
+    /// Flattened public input vector consumed by the next adapter stage.
+    pub public_inputs: Vec<CM::Scalar>,
+}
+
+impl<CM: CommitmentDef> ReciprocalCycleFoldStatement<CM> {
+    /// Returns the number of flattened public inputs.
+    pub fn public_input_len(&self) -> usize {
+        self.public_inputs.len()
+    }
+}
+
+/// [`ReciprocalAdapterError`] enumerates failures detected while bridging the
+/// reciprocal helper layer into CycleFold-style public inputs.
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum ReciprocalAdapterError {
+    /// The public instance does not belong to the selected same-`q` lane.
+    #[error(transparent)]
+    Type(#[from] ReciprocalTypeError),
+    /// Wrapper-level consistency failed before flattening.
+    #[error(transparent)]
+    Wrapper(#[from] ReciprocalWrapperError),
+    /// The flattened public inputs do not match the statement payload.
+    #[error("statement public inputs do not match the reciprocal instance/proof payload")]
+    PublicInputMismatch,
+}
+
+/// [`ReciprocalCycleFoldAdapter`] provides the minimal adapter boundary used by
+/// the PoC before a full folding-scheme integration exists.
+#[derive(Clone, Debug, Default)]
+pub struct ReciprocalCycleFoldAdapter;
+
+impl ReciprocalCycleFoldAdapter {
+    /// Builds a wrapper-level proof from a public instance inside a fixed
+    /// same-`q` lane.
+    pub fn wrap_in_lane<CM: CommitmentDef>(
+        lane: &ReciprocalSameQLane<CM>,
+        instance: &ReciprocalPublicInstance<CM>,
+    ) -> Result<ReciprocalAggregatedProof<CM>, ReciprocalAdapterError> {
+        lane.check_pair(instance, instance)?;
+        Ok(ReciprocalWrapper::aggregate(
+            instance,
+            ReciprocalWrapper::decompose(instance),
+        )?)
+    }
+
+    /// Builds a reciprocal opening proof from a public instance and witness
+    /// inside a fixed same-`q` lane.
+    pub fn wrap_opening_in_lane<CM: CommitmentOps>(
+        ck: &CM::Key,
+        lane: &ReciprocalSameQLane<CM>,
+        instance: &ReciprocalPublicInstance<CM>,
+        witness: ReciprocalWitness<CM>,
+    ) -> Result<ReciprocalAggregatedProof<CM>, ReciprocalAdapterError>
+    where
+        CM::Scalar: PrimeField,
+    {
+        Ok(ReciprocalWrapper::prove_opening_in_lane(
+            ck, lane, instance, witness,
+        )?)
+    }
+
+    /// Flattens a reciprocal public instance into a CycleFold-friendly public
+    /// input vector.
+    pub fn instance_public_inputs<CM: CommitmentDef>(
+        instance: &ReciprocalPublicInstance<CM>,
+    ) -> Vec<CM::Scalar>
+    where
+        CM::Scalar: PrimeField,
+    {
+        let mut public_inputs = Vec::new();
+        public_inputs.push(Self::scalar_from_u64::<CM>(INSTANCE_DOMAIN_TAG));
+        public_inputs.push(Self::scalar_from_u64::<CM>(instance.q.len() as u64));
+        instance.q.absorb_into(&mut public_inputs);
+        instance.y.absorb_into(&mut public_inputs);
+        instance.cm_x.absorb_into(&mut public_inputs);
+        public_inputs
+    }
+
+    /// Flattens an aggregated reciprocal proof into a CycleFold-friendly public
+    /// input vector.
+    pub fn proof_public_inputs<CM: CommitmentDef>(
+        proof: &ReciprocalAggregatedProof<CM>,
+    ) -> Vec<CM::Scalar>
+    where
+        CM::Scalar: PrimeField,
+    {
+        let mut public_inputs = Vec::new();
+        public_inputs.push(Self::scalar_from_u64::<CM>(PROOF_DOMAIN_TAG));
+        public_inputs.push(Self::scalar_from_u64::<CM>(proof.coordinates.len() as u64));
+
+        for claim in &proof.coordinates {
+            public_inputs.push(Self::scalar_from_u64::<CM>(claim.coordinate as u64));
+            public_inputs.push(Self::scalar_from_u64::<CM>(claim.q.len() as u64));
+            claim.q.absorb_into(&mut public_inputs);
+            claim.value.absorb_into(&mut public_inputs);
+            claim.cm_x.absorb_into(&mut public_inputs);
+        }
+
+        public_inputs
+    }
+
+    /// Verifies wrapper-level consistency and flattens `(instance, proof)` into
+    /// a single public input vector.
+    pub fn to_public_inputs<CM: CommitmentDef>(
+        instance: &ReciprocalPublicInstance<CM>,
+        proof: &ReciprocalAggregatedProof<CM>,
+    ) -> Result<Vec<CM::Scalar>, ReciprocalAdapterError>
+    where
+        CM::Scalar: PrimeField,
+    {
+        ReciprocalWrapper::verify(instance, proof)?;
+
+        let instance_public_inputs = Self::instance_public_inputs(instance);
+        let proof_public_inputs = Self::proof_public_inputs(proof);
+
+        let mut public_inputs = Vec::with_capacity(
+            3 + instance_public_inputs.len() + proof_public_inputs.len(),
+        );
+        public_inputs.push(Self::scalar_from_u64::<CM>(STATEMENT_DOMAIN_TAG));
+        public_inputs.push(Self::scalar_from_u64::<CM>(instance_public_inputs.len() as u64));
+        public_inputs.extend(instance_public_inputs);
+        public_inputs.push(Self::scalar_from_u64::<CM>(proof_public_inputs.len() as u64));
+        public_inputs.extend(proof_public_inputs);
+        Ok(public_inputs)
+    }
+
+    /// Same as [`ReciprocalCycleFoldAdapter::to_public_inputs`], but first
+    /// enforces the fixed same-`q` lane used by the PoC.
+    pub fn to_public_inputs_in_lane<CM: CommitmentDef>(
+        lane: &ReciprocalSameQLane<CM>,
+        instance: &ReciprocalPublicInstance<CM>,
+        proof: &ReciprocalAggregatedProof<CM>,
+    ) -> Result<Vec<CM::Scalar>, ReciprocalAdapterError>
+    where
+        CM::Scalar: PrimeField,
+    {
+        lane.check_pair(instance, instance)?;
+        ReciprocalWrapper::verify_in_lane(lane, instance, proof)?;
+        Self::to_public_inputs(instance, proof)
+    }
+
+    /// Wraps the instance, verifies the lane policy, and returns the minimal
+    /// verifier-facing statement exported by the reciprocal PoC.
+    pub fn build_statement_in_lane<CM: CommitmentDef>(
+        lane: &ReciprocalSameQLane<CM>,
+        instance: &ReciprocalPublicInstance<CM>,
+    ) -> Result<ReciprocalCycleFoldStatement<CM>, ReciprocalAdapterError>
+    where
+        CM::Scalar: PrimeField,
+    {
+        let proof = Self::wrap_in_lane(lane, instance)?;
+        let public_inputs = Self::to_public_inputs_in_lane(lane, instance, &proof)?;
+        Ok(ReciprocalCycleFoldStatement {
+            instance: instance.clone(),
+            proof,
+            public_inputs,
+        })
+    }
+
+    /// Wraps the instance with a real opening proof and returns the minimal
+    /// verifier-facing statement exported by the reciprocal PoC.
+    pub fn build_opening_statement_in_lane<CM: CommitmentOps>(
+        ck: &CM::Key,
+        lane: &ReciprocalSameQLane<CM>,
+        instance: &ReciprocalPublicInstance<CM>,
+        witness: ReciprocalWitness<CM>,
+    ) -> Result<ReciprocalCycleFoldStatement<CM>, ReciprocalAdapterError>
+    where
+        CM::Scalar: PrimeField,
+    {
+        let proof = Self::wrap_opening_in_lane(ck, lane, instance, witness)?;
+        let public_inputs = Self::to_public_inputs_in_lane(lane, instance, &proof)?;
+        Ok(ReciprocalCycleFoldStatement {
+            instance: instance.clone(),
+            proof,
+            public_inputs,
+        })
+    }
+
+    /// Verifies that a reciprocal statement is internally self-consistent.
+    pub fn verify_statement<CM: CommitmentDef>(
+        statement: &ReciprocalCycleFoldStatement<CM>,
+    ) -> Result<(), ReciprocalAdapterError>
+    where
+        CM::Scalar: PrimeField,
+    {
+        let expected_public_inputs =
+            Self::to_public_inputs(&statement.instance, &statement.proof)?;
+        if statement.public_inputs != expected_public_inputs {
+            return Err(ReciprocalAdapterError::PublicInputMismatch);
+        }
+        Ok(())
+    }
+
+    /// Verifies a reciprocal opening statement against the provided commitment
+    /// key.
+    pub fn verify_opening_statement<CM: CommitmentOps>(
+        ck: &CM::Key,
+        statement: &ReciprocalCycleFoldStatement<CM>,
+    ) -> Result<(), ReciprocalAdapterError>
+    where
+        CM::Scalar: PrimeField,
+    {
+        ReciprocalWrapper::verify_opening(ck, &statement.instance, &statement.proof)?;
+        Self::verify_statement(statement)
+    }
+
+    /// Verifies that a reciprocal statement is self-consistent and belongs to
+    /// the selected same-`q` lane.
+    pub fn verify_statement_in_lane<CM: CommitmentDef>(
+        lane: &ReciprocalSameQLane<CM>,
+        statement: &ReciprocalCycleFoldStatement<CM>,
+    ) -> Result<(), ReciprocalAdapterError>
+    where
+        CM::Scalar: PrimeField,
+    {
+        let expected_public_inputs =
+            Self::to_public_inputs_in_lane(lane, &statement.instance, &statement.proof)?;
+        if statement.public_inputs != expected_public_inputs {
+            return Err(ReciprocalAdapterError::PublicInputMismatch);
+        }
+        Ok(())
+    }
+
+    /// Verifies a reciprocal opening statement under the selected same-`q`
+    /// lane and commitment key.
+    pub fn verify_opening_statement_in_lane<CM: CommitmentOps>(
+        ck: &CM::Key,
+        lane: &ReciprocalSameQLane<CM>,
+        statement: &ReciprocalCycleFoldStatement<CM>,
+    ) -> Result<(), ReciprocalAdapterError>
+    where
+        CM::Scalar: PrimeField,
+    {
+        Self::verify_statement_in_lane(lane, statement)?;
+        ReciprocalWrapper::verify_opening(ck, &statement.instance, &statement.proof)?;
+        Ok(())
+    }
+
+    fn scalar_from_u64<CM: CommitmentDef>(value: u64) -> CM::Scalar
+    where
+        CM::Scalar: PrimeField,
+    {
+        CM::Scalar::from_le_bytes_mod_order(&value.to_le_bytes())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ark_ff::PrimeField;
+    use ark_bn254::G1Projective;
+    use ark_std::rand::thread_rng;
+    use sonobe_primitives::{
+        commitments::{CommitmentDef, CommitmentOps, pedersen::Pedersen},
+        transcripts::Absorbable,
+    };
+
+    use super::{
+        INSTANCE_DOMAIN_TAG, PROOF_DOMAIN_TAG, ReciprocalAdapterError,
+        ReciprocalCycleFoldAdapter, STATEMENT_DOMAIN_TAG,
+    };
+    use crate::compilers::cyclefold::adapters::{
+        reciprocal_types::{
+            ReciprocalPublicInstance, ReciprocalSameQLane, ReciprocalWitness,
+            reciprocal_n4_trace_and_output,
+        },
+        reciprocal_wrapper::{ReciprocalAggregatedProof, ReciprocalWrapper, ReciprocalWrapperError},
+    };
+
+    type TestCM = Pedersen<G1Projective, true>;
+
+    fn sample_instance() -> ReciprocalPublicInstance<TestCM> {
+        ReciprocalPublicInstance {
+            cm_x: Default::default(),
+            q: vec![1_u64.into(), 2_u64.into(), 3_u64.into(), 4_u64.into()],
+            y: [10_u64.into(), 11_u64.into(), 12_u64.into(), 13_u64.into()],
+        }
+    }
+
+    fn sample_opening_bundle() -> (
+        <TestCM as CommitmentDef>::Key,
+        ReciprocalPublicInstance<TestCM>,
+        ReciprocalWitness<TestCM>,
+    ) {
+        let mut rng = thread_rng();
+        let x = vec![5_u64.into(), 6_u64.into(), 7_u64.into(), 8_u64.into()];
+        let q = vec![1_u64.into(), 2_u64.into(), 3_u64.into(), 4_u64.into()];
+        let ck = TestCM::generate_key(x.len(), &mut rng).expect("commitment key generation should work");
+        let (cm_x, omega) =
+            TestCM::commit(&ck, &x, &mut rng).expect("commitment generation should work");
+        let (trace, y) =
+            reciprocal_n4_trace_and_output(&q, &x).expect("worked reciprocal evaluator should work");
+        (
+            ck,
+            ReciprocalPublicInstance { cm_x, q, y },
+            ReciprocalWitness { x, trace, omega },
+        )
+    }
+
+    #[test]
+    fn test_reciprocal_adapter_flattens_instance_with_length_prefix() {
+        let instance = sample_instance();
+        let public_inputs = ReciprocalCycleFoldAdapter::instance_public_inputs(&instance);
+        let mut expected = vec![
+            <TestCM as CommitmentDef>::Scalar::from_le_bytes_mod_order(
+                &INSTANCE_DOMAIN_TAG.to_le_bytes(),
+            ),
+            <TestCM as CommitmentDef>::Scalar::from_le_bytes_mod_order(
+                &(instance.q.len() as u64).to_le_bytes(),
+            ),
+        ];
+        instance.q.absorb_into(&mut expected);
+        instance.y.absorb_into(&mut expected);
+        instance.cm_x.absorb_into(&mut expected);
+
+        assert_eq!(public_inputs, expected);
+    }
+
+    #[test]
+    fn test_reciprocal_adapter_flattens_proof_with_coordinate_prefixes() {
+        let instance = sample_instance();
+        let proof = ReciprocalWrapper::aggregate(&instance, ReciprocalWrapper::decompose(&instance))
+            .expect("wrapper should accept consistent reciprocal coordinates");
+        let public_inputs = ReciprocalCycleFoldAdapter::proof_public_inputs(&proof);
+
+        assert_eq!(
+            public_inputs[0],
+            <TestCM as CommitmentDef>::Scalar::from_le_bytes_mod_order(&PROOF_DOMAIN_TAG.to_le_bytes())
+        );
+        assert_eq!(public_inputs[1], 4_u64.into());
+        assert!(public_inputs.len() > 2 + 4);
+    }
+
+    #[test]
+    fn test_reciprocal_adapter_to_public_inputs_rejects_invalid_wrapper_proof() {
+        let instance = sample_instance();
+        let mut coordinates = ReciprocalWrapper::decompose(&instance);
+        coordinates[0].value = 99_u64.into();
+        let proof = ReciprocalAggregatedProof {
+            coordinates,
+            opening_witness: None,
+        };
+
+        assert_eq!(
+            ReciprocalCycleFoldAdapter::to_public_inputs(&instance, &proof),
+            Err(ReciprocalAdapterError::Wrapper(
+                ReciprocalWrapperError::OutputMismatch { coordinate: 0 }
+            ))
+        );
+    }
+
+    #[test]
+    fn test_reciprocal_adapter_to_public_inputs_in_lane_rejects_descriptor_mismatch() {
+        let instance = sample_instance();
+        let proof = ReciprocalWrapper::aggregate(&instance, ReciprocalWrapper::decompose(&instance))
+            .expect("wrapper should accept consistent reciprocal coordinates");
+        let wrong_lane = ReciprocalSameQLane::<TestCM>::new(vec![9_u64.into(), 9_u64.into()]);
+
+        assert_eq!(
+            ReciprocalCycleFoldAdapter::to_public_inputs_in_lane(&wrong_lane, &instance, &proof),
+            Err(ReciprocalAdapterError::Type(
+                super::ReciprocalTypeError::DescriptorMismatch
+            ))
+        );
+    }
+
+    #[test]
+    fn test_reciprocal_adapter_build_statement_in_lane() {
+        let instance = sample_instance();
+        let lane = ReciprocalSameQLane::<TestCM>::new(instance.q.clone());
+        let statement =
+            ReciprocalCycleFoldAdapter::build_statement_in_lane(&lane, &instance)
+                .expect("same-q lane should accept the statement");
+
+        assert_eq!(statement.instance, instance);
+        assert_eq!(statement.proof.coordinates.len(), 4);
+        assert_eq!(
+            statement.public_inputs[0],
+            <TestCM as CommitmentDef>::Scalar::from_le_bytes_mod_order(
+                &STATEMENT_DOMAIN_TAG.to_le_bytes()
+            )
+        );
+        assert_eq!(statement.public_input_len(), statement.public_inputs.len());
+    }
+
+    #[test]
+    fn test_reciprocal_adapter_verify_statement_in_lane_accepts_valid_statement() {
+        let instance = sample_instance();
+        let lane = ReciprocalSameQLane::<TestCM>::new(instance.q.clone());
+        let statement =
+            ReciprocalCycleFoldAdapter::build_statement_in_lane(&lane, &instance)
+                .expect("same-q lane should accept the statement");
+
+        assert_eq!(
+            ReciprocalCycleFoldAdapter::verify_statement_in_lane(&lane, &statement),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn test_reciprocal_adapter_verify_statement_in_lane_rejects_tampered_output() {
+        let instance = sample_instance();
+        let lane = ReciprocalSameQLane::<TestCM>::new(instance.q.clone());
+        let mut statement =
+            ReciprocalCycleFoldAdapter::build_statement_in_lane(&lane, &instance)
+                .expect("same-q lane should accept the statement");
+        statement.instance.y[0] = 99_u64.into();
+
+        assert_eq!(
+            ReciprocalCycleFoldAdapter::verify_statement_in_lane(&lane, &statement),
+            Err(ReciprocalAdapterError::Wrapper(
+                ReciprocalWrapperError::OutputMismatch { coordinate: 0 }
+            ))
+        );
+    }
+
+    #[test]
+    fn test_reciprocal_adapter_verify_statement_rejects_public_input_mismatch() {
+        let instance = sample_instance();
+        let lane = ReciprocalSameQLane::<TestCM>::new(instance.q.clone());
+        let mut statement =
+            ReciprocalCycleFoldAdapter::build_statement_in_lane(&lane, &instance)
+                .expect("same-q lane should accept the statement");
+        statement.public_inputs[0] = 0_u64.into();
+
+        assert_eq!(
+            ReciprocalCycleFoldAdapter::verify_statement(&statement),
+            Err(ReciprocalAdapterError::PublicInputMismatch)
+        );
+    }
+
+    #[test]
+    fn test_reciprocal_adapter_build_opening_statement_in_lane() {
+        let (ck, instance, witness) = sample_opening_bundle();
+        let lane = ReciprocalSameQLane::<TestCM>::new(instance.q.clone());
+        let statement = ReciprocalCycleFoldAdapter::build_opening_statement_in_lane(
+            &ck,
+            &lane,
+            &instance,
+            witness,
+        )
+        .expect("opening statement construction should work");
+
+        assert!(statement.proof.opening_witness.is_some());
+        assert_eq!(
+            ReciprocalCycleFoldAdapter::verify_opening_statement_in_lane(&ck, &lane, &statement),
+            Ok(())
+        );
+    }
+}
