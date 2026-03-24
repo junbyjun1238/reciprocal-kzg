@@ -50,30 +50,30 @@ integration paths, tests, and demo artifacts.
 - malformed output, wrong descriptor, and wrong opening are rejected inside the integrated path
 - the example runner demonstrates the new flow end to end
 
-## M3. Aggregation and Decider Path
+## M3. Aggregation Path
 
 ### Build
 
 - implement a real aggregation path for the `F^4` reciprocal outputs
-- upgrade the current helper-style offchain decider into a library entry point over the aggregated proof object
-- connect aggregation, opening checks, and fold linkage in one verifier path
+- make the aggregated reciprocal object the default artifact produced by the example and test paths
 
 ### Deliverables
 
 - 4-coordinate aggregation path
-- aggregated proof verification entry point
-- decider-path tests
+- aggregated proof object and verification helpers
+- aggregation-path tests
 
 ### Acceptance
 
 - the verifier consumes an aggregated reciprocal proof object rather than ad hoc helper outputs
-- one decider entry point checks relation consistency, opening consistency, and fold linkage
 - the example and tests use the aggregated path by default
 
-## M4. Hardening and Grant Demo Package
+## M4. Decider Hardening and Grant Demo Package
 
 ### Build
 
+- upgrade the current helper-style offchain decider into a library entry point over the aggregated proof object
+- connect aggregation, opening checks, and fold linkage in one verifier path
 - refresh the benchmark package around the KZG-backed path
 - rerun the naive-versus-specialized comparison with the updated backend path
 - prepare reviewer-facing run instructions and a clean end-to-end demo flow
@@ -81,11 +81,13 @@ integration paths, tests, and demo artifacts.
 ### Deliverables
 
 - refreshed benchmark snapshot
+- refreshed kernel benchmark snapshot
 - reviewer run guide
 - end-to-end demo command set
 
 ### Acceptance
 
+- one decider entry point checks relation consistency, opening consistency, and fold linkage
 - a reviewer can run the main demo flow from the repository without extra interpretation
 - the checked-in benchmark snapshot reflects the KZG-backed path
 - the repo clearly shows which code is the library, which path is the integration flow, and which artifacts are benchmark outputs

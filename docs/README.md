@@ -9,4 +9,7 @@ Core paper PDFs, milestone notes, and reviewer-facing documentation.
 - `m4_milestones.md`
 - `reciprocal_grant_checklist.md`
 
-The canonical benchmark CSV lives in `../benchmark/reciprocal_snapshot.csv`.
+The canonical benchmark artifacts live in:
+
+- `../benchmark/reciprocal_snapshot.csv`
+- `../benchmark/reciprocal_kernel_snapshot.csv`

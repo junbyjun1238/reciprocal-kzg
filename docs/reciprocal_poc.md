@@ -74,6 +74,11 @@ These layers define the PoC-level object boundary:
 - Pedersen-backed opening witness checks for the worked `N=4` reciprocal relation
 - flattening into CycleFold-friendly public inputs
 
+The important boundary caveat is that the current `y` check is exercised through
+the wrapper/offchain statement path. This PoC shows that the statement boundary
+is real and opening-aware, but it does not yet claim that `y` is natively bound
+all the way through a final integrated Nova/IVC verifier path.
+
 ### 3. Nova/CycleFold integration tests and snapshot benchmark
 
 File:
@@ -166,6 +171,9 @@ offchain decider, and then prints the benchmark snapshot rows used by the PoC.
 The canonical checked-in CSV snapshot is at
 `../benchmark/reciprocal_snapshot.csv`.
 
+The canonical arithmetic kernel snapshot is at
+`../benchmark/reciprocal_kernel_snapshot.csv`.
+
 The reciprocal kernel benchmark is intentionally separate from the Nova/CycleFold
 snapshot. It measures the algebraic backend more directly:
 
@@ -223,6 +231,10 @@ run-dependent and should not be oversold.
 - It does not show final Fiat-Shamir or qROM security.
 - It does not show a production decider.
 - It does not prove asymptotic superiority for a full generic-`n` scheme.
+
+The current benchmark is intentionally Pedersen-backed because the KZG
+descriptor-opening path is the funded implementation milestone, not a checked-in
+baseline in this repository.
 
 What it does show is narrower and still useful for the grant: under a fixed
 worked instance, the reciprocal backend is no longer a toy affine stand-in, and

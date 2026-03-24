@@ -36,5 +36,7 @@ cargo test -p sonobe-ivc reciprocal_ -- --nocapture
 cargo run -p sonobe-ivc --example reciprocal_poc
 ```
 
-The canonical checked-in benchmark snapshot lives at
-`benchmark/reciprocal_snapshot.csv`.
+The canonical checked-in benchmark artifacts live at:
+
+- `benchmark/reciprocal_snapshot.csv`
+- `benchmark/reciprocal_kernel_snapshot.csv`
