@@ -45,6 +45,16 @@ The canonical checked-in benchmark artifacts live at:
 - `benchmark/reciprocal_snapshot.csv`: Sonobe-integrated PoC snapshot comparing the stock reference row, the naive reciprocal baseline, and the specialized reciprocal path
 - `benchmark/reciprocal_kernel_snapshot.csv`: arithmetic kernel scaling snapshot up to depth 16 comparing the specialized reciprocal backend against direct fixed-basis and explicit-row baselines
 
+To re-check the checked-in benchmark conclusions after cloning:
+
+```powershell
+./benchmark/verify_repro.ps1
+```
+
+This script compares the rerun benchmark output against the checked-in CSVs on
+their structural metrics. Timing columns are intentionally treated as local and
+non-canonical.
+
 ## License
 
 This repository is released under the MIT License.

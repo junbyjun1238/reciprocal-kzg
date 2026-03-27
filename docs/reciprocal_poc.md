@@ -138,6 +138,12 @@ cargo test -p sonobe-ivc benchmark_nova_nova_snapshot -- --ignored --nocapture
 cargo run -p sonobe-primitives --example reciprocal_kernel_bench --release
 ```
 
+### Reproducibility check
+
+```powershell
+./benchmark/verify_repro.ps1
+```
+
 ### Example runner
 
 ```powershell

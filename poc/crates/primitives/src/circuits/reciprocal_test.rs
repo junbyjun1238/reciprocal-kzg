@@ -144,6 +144,21 @@ fn reciprocal_n4_constraints<F: SonobeField>(
     (outputs, next_state)
 }
 
+fn reciprocal_output_values<F: SonobeField>(
+    outputs: [FpVar<F>; 4],
+) -> Result<[F; 4], SynthesisError> {
+    if outputs[0].cs().is_in_setup_mode() {
+        return Ok([F::zero(); 4]);
+    }
+
+    Ok([
+        outputs[0].value()?,
+        outputs[1].value()?,
+        outputs[2].value()?,
+        outputs[3].value()?,
+    ])
+}
+
 /// [`ReciprocalCircuitForTest`] is a minimal `FCircuit` for the exact worked
 /// reciprocal evaluator at `N = 4`.
 ///
@@ -272,12 +287,7 @@ impl<F: SonobeField> FCircuit for ReciprocalCircuitForTest<F> {
         let leaf_offsets = self.leaf_offsets.map(FpVar::Constant);
         let (outputs, next_state) =
             reciprocal_n4_constraints(state[0].clone(), q, leaf_offsets);
-        let outputs = [
-            outputs[0].value().unwrap_or_default(),
-            outputs[1].value().unwrap_or_default(),
-            outputs[2].value().unwrap_or_default(),
-            outputs[3].value().unwrap_or_default(),
-        ];
+        let outputs = reciprocal_output_values(outputs)?;
 
         Ok(([next_state], outputs))
     }
@@ -317,12 +327,7 @@ impl<F: SonobeField> FCircuit for NaiveReciprocalCircuitForTest<F> {
             state[8].clone(),
         ];
         let (outputs, next_x) = reciprocal_n4_constraints(x, q.clone(), leaf_offsets.clone());
-        let outputs = [
-            outputs[0].value().unwrap_or_default(),
-            outputs[1].value().unwrap_or_default(),
-            outputs[2].value().unwrap_or_default(),
-            outputs[3].value().unwrap_or_default(),
-        ];
+        let outputs = reciprocal_output_values(outputs)?;
 
         Ok((
             [

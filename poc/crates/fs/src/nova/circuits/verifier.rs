@@ -32,20 +32,30 @@ where
                 u: (U.u.clone() + &rho)
                     .try_into()
                     .map_err(|_| SynthesisError::Unsatisfiable)?,
-                cm_e: CM::CommitmentVar::new_witness(
-                    U.cm_e.cs().or(proof.cs()).or(rho.cs()),
-                    || {
-                        Ok(U.cm_e.value().unwrap_or_default()
-                            + proof.value().unwrap_or_default() * rho.value().unwrap_or_default())
-                    },
-                )?,
-                cm_w: CM::CommitmentVar::new_witness(
-                    U.cm_w.cs().or(u.cm_w.cs()).or(rho.cs()),
-                    || {
-                        Ok(U.cm_w.value().unwrap_or_default()
-                            + u.cm_w.value().unwrap_or_default() * rho.value().unwrap_or_default())
-                    },
-                )?,
+                cm_e: {
+                    let cm_e_cs = U.cm_e.cs().or(proof.cs()).or(rho.cs());
+                    CM::CommitmentVar::new_witness(cm_e_cs.clone(), || {
+                        if cm_e_cs.is_in_setup_mode() {
+                            return Ok(Default::default());
+                        }
+                        let u_cm_e = U.cm_e.value()?;
+                        let proof_value = proof.value()?;
+                        let rho_value = rho.value()?;
+                        Ok(u_cm_e + proof_value * rho_value)
+                    })?
+                },
+                cm_w: {
+                    let cm_w_cs = U.cm_w.cs().or(u.cm_w.cs()).or(rho.cs());
+                    CM::CommitmentVar::new_witness(cm_w_cs.clone(), || {
+                        if cm_w_cs.is_in_setup_mode() {
+                            return Ok(Default::default());
+                        }
+                        let u_cm_w = U.cm_w.value()?;
+                        let u_witness = u.cm_w.value()?;
+                        let rho_value = rho.value()?;
+                        Ok(u_cm_w + u_witness * rho_value)
+                    })?
+                },
                 x: U.x
                     .iter()
                     .zip(&u.x)
@@ -78,22 +88,31 @@ where
                 u: (U2.u.clone() * &rho + &U1.u)
                     .try_into()
                     .map_err(|_| SynthesisError::Unsatisfiable)?,
-                cm_e: CM::CommitmentVar::new_witness(
-                    U1.cm_e.cs().or(U2.cm_e.cs()).or(proof.cs()).or(rho.cs()),
-                    || {
-                        let rho = rho.value().unwrap_or_default();
-                        Ok(U1.cm_e.value().unwrap_or_default()
-                            + proof.value().unwrap_or_default() * rho
-                            + U2.cm_e.value().unwrap_or_default() * rho * rho)
-                    },
-                )?,
-                cm_w: CM::CommitmentVar::new_witness(
-                    U1.cm_w.cs().or(U2.cm_w.cs()).or(rho.cs()),
-                    || {
-                        Ok(U1.cm_w.value().unwrap_or_default()
-                            + U2.cm_w.value().unwrap_or_default() * rho.value().unwrap_or_default())
-                    },
-                )?,
+                cm_e: {
+                    let cm_e_cs = U1.cm_e.cs().or(U2.cm_e.cs()).or(proof.cs()).or(rho.cs());
+                    CM::CommitmentVar::new_witness(cm_e_cs.clone(), || {
+                        if cm_e_cs.is_in_setup_mode() {
+                            return Ok(Default::default());
+                        }
+                        let rho_value = rho.value()?;
+                        let u1_cm_e = U1.cm_e.value()?;
+                        let proof_value = proof.value()?;
+                        let u2_cm_e = U2.cm_e.value()?;
+                        Ok(u1_cm_e + proof_value * rho_value + u2_cm_e * rho_value * rho_value)
+                    })?
+                },
+                cm_w: {
+                    let cm_w_cs = U1.cm_w.cs().or(U2.cm_w.cs()).or(rho.cs());
+                    CM::CommitmentVar::new_witness(cm_w_cs.clone(), || {
+                        if cm_w_cs.is_in_setup_mode() {
+                            return Ok(Default::default());
+                        }
+                        let u1_cm_w = U1.cm_w.value()?;
+                        let u2_cm_w = U2.cm_w.value()?;
+                        let rho_value = rho.value()?;
+                        Ok(u1_cm_w + u2_cm_w * rho_value)
+                    })?
+                },
                 x: U1
                     .x
                     .iter()

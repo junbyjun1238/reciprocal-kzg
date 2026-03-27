@@ -166,11 +166,16 @@ impl<CM: GroupBasedCommitment, const CHALLENGE_BITS: usize> FoldingSchemeCycleFo
             &rho_bits,
             Bounds(Zero::zero(), CF2::<CM::Commitment>::MODULUS.into().into()),
         )?;
-        let cm_tmp =
-            EmulatedAffineVar::new_witness(U2.cm_e.cs().or(proof.cs()).or(rho_bits.cs()), || {
-                let rho_bits = rho_bits.value().unwrap_or_default();
+        let cm_tmp_cs = U2.cm_e.cs().or(proof.cs()).or(rho_bits.cs());
+        let cm_tmp = EmulatedAffineVar::new_witness(cm_tmp_cs.clone(), || {
+                if cm_tmp_cs.is_in_setup_mode() {
+                    return Ok(Default::default());
+                }
+                let rho_bits = rho_bits.value()?;
                 let rho = CM::Scalar::from_bits_le(&rho_bits);
-                Ok(proof.value().unwrap_or_default() + U2.cm_e.value().unwrap_or_default() * rho)
+                let proof_value = proof.value()?;
+                let u2_value = U2.cm_e.value()?;
+                Ok(proof_value + u2_value * rho)
             })?;
         Ok(vec![
             once(rho.clone())
