@@ -23,8 +23,8 @@ It is **not** yet a full reciprocal folding scheme integration into
 `sonobe-fs`, it is **not** a final KZG path, and it does **not** claim final
 Fiat-Shamir security.
 
-For the concrete "what must be added next for the ESP grant PoC" checklist, see
-`reciprocal_grant_checklist.md`.
+For the implementation milestone plan behind the ESP grant PoC, see
+`m4_milestones.md`.
 
 For the current paper draft that this PoC is based on, see
 `core_paper/reciprocal_fold_note.pdf`.

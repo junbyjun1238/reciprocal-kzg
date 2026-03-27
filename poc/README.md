@@ -37,7 +37,6 @@ cargo run -p sonobe-ivc --example reciprocal_poc
 
 - `../docs/reciprocal_poc.md`
 - `../docs/m4_milestones.md`
-- `../docs/reciprocal_grant_checklist.md`
 - `../docs/core_paper/reciprocal_fold_note.pdf`
 - `../benchmark/reciprocal_snapshot.csv`
 - `../benchmark/reciprocal_kernel_snapshot.csv`
