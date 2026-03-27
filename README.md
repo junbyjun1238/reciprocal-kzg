@@ -1,7 +1,10 @@
 # reciprocal-kzg
 
-This repository packages a reciprocal-folding backend project aimed at a KZG
-descriptor-opening path.
+This repository packages a Sonobe extension for a reciprocal
+descriptor-opening backend.
+
+The checked-in implementation is a reciprocal PoC, and the next implementation
+milestone is a KZG-backed descriptor-opening path.
 
 ## Current Scope
 
