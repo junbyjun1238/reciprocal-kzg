@@ -42,5 +42,5 @@ cargo run -p sonobe-ivc --example reciprocal_poc
 
 The canonical checked-in benchmark artifacts live at:
 
-- `benchmark/reciprocal_snapshot.csv`
-- `benchmark/reciprocal_kernel_snapshot.csv`
+- `benchmark/reciprocal_snapshot.csv`: Sonobe-integrated PoC snapshot comparing the stock reference row, the naive reciprocal baseline, and the specialized reciprocal path
+- `benchmark/reciprocal_kernel_snapshot.csv`: arithmetic kernel scaling snapshot up to depth 16 comparing the specialized reciprocal backend against direct fixed-basis and explicit-row baselines
