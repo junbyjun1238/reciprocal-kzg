@@ -5,9 +5,6 @@
 This repository contains an experimental reciprocal-folding PoC built in a
 Sonobe-derived workspace.
 
-The repository name reflects the target KZG direction. The checked-in
-implementation described in this document remains Pedersen-backed today.
-
 The PoC is intentionally narrow:
 
 - fixed same-`q` lane only
@@ -15,13 +12,8 @@ The PoC is intentionally narrow:
 - wrapper-level aggregated statement `(C, q, y, Pi)`
 - Pedersen-backed current staging integration
 
-This is a grant-facing backend PoC, not a final scheme claim. It is meant to
-show that the algebraic backend, statement boundary, and opening-aware PoC path
-are already real enough to justify the next funding step.
-
-It is **not** yet a full reciprocal folding scheme integration into
-`sonobe-fs`, it is **not** a final KZG path, and it does **not** claim final
-Fiat-Shamir security.
+This is a grant-facing backend PoC focused on the algebraic backend, statement
+boundary, and opening-aware path exercised by the checked-in implementation.
 
 For the implementation milestone plan behind the ESP grant PoC, see
 `m4_milestones.md`.
@@ -50,10 +42,9 @@ This file currently contains two circuits:
   - carries descriptor and leaf-family metadata inside the state
   - serves as a naive baseline for comparison
 
-The current PoC is still honest about scope: it does not yet implement a
-generic in-repo quartic extension representation for ambient `tau`. Instead, it
-stores the exact algebraic seed data needed by the worked `N=4` instance and
-expands `mu_1 -> mu_2` with the note's `c = 0` reciprocal-shift update.
+The worked `N=4` path stores the exact algebraic seed data needed by the
+current evaluator and expands `mu_1 -> mu_2` with the note's `c = 0`
+reciprocal-shift update.
 
 ### 2. Reciprocal public object / witness helpers
 
@@ -74,10 +65,9 @@ These layers define the PoC-level object boundary:
 - Pedersen-backed opening witness checks for the worked `N=4` reciprocal relation
 - flattening into CycleFold-friendly public inputs
 
-The important boundary caveat is that the current `y` check is exercised through
-the wrapper/offchain statement path. This PoC shows that the statement boundary
-is real and opening-aware, but it does not yet claim that `y` is natively bound
-all the way through a final integrated Nova/IVC verifier path.
+In the checked-in PoC, the `y` check is exercised through the wrapper/offchain
+statement path. That is the verifier-facing boundary demonstrated by the current
+integration flow.
 
 ### 3. Nova/CycleFold integration tests and snapshot benchmark
 
@@ -110,21 +100,11 @@ This PoC currently supports the following claims:
 - a minimal offchain decider can consume the current opening-aware reciprocal statement in one entry point
 - malformed `y` and wrong descriptor lanes are rejected by the reciprocal statement checks
 
-For grant-scoping purposes, the intended claim is narrower than "the reciprocal
-scheme is done." The intended claim is:
+The central claim of the checked-in PoC is:
 
-> Sonobe staging already supports a same-`q`, offchain, Pedersen-backed
-> reciprocal backend PoC with a real worked kernel, a verifier-visible
-> statement boundary, and a concrete next step toward descriptor-consuming
-> opening and decider hardening.
-
-This PoC does **not** yet claim:
-
-- a full reciprocal folding scheme inside `sonobe-fs`
-- final committed-input extractability
-- final Fiat-Shamir / ROM / qROM theorem
-- final KZG-based production path
-- a production decider or onchain verifier
+> Sonobe staging already supports a same-`q`, offchain reciprocal backend PoC
+> with a real worked kernel, a verifier-visible statement boundary, and a
+> concrete next step toward descriptor-consuming opening and decider hardening.
 
 ## Where To Start Reading
 
@@ -225,18 +205,7 @@ run-dependent and should not be oversold.
 - The specialized reciprocal row keeps the same worked kernel while avoiding that state-carrying overhead: `state_width` stays at `1`, `step_witnesses` drops to `2`, and `primary_constraints` stays essentially flat against stock.
 - The specialized row also exposes a real verifier-visible object: `adapter_public_inputs = 63`. That number is not "free," but it is exactly the kind of extra public surface the current PoC is supposed to make visible before a final opening layer exists.
 
-### What This Benchmark Does Not Show
-
-- It does not show a final KZG backend.
-- It does not show final Fiat-Shamir or qROM security.
-- It does not show a production decider.
-- It does not prove asymptotic superiority for a full generic-`n` scheme.
-
-The current benchmark is intentionally Pedersen-backed because the KZG
-descriptor-opening path is the funded implementation milestone, not a checked-in
-baseline in this repository.
-
-What it does show is narrower and still useful for the grant: under a fixed
+What it shows, and why it is still useful for the grant, is that under a fixed
 worked instance, the reciprocal backend is no longer a toy affine stand-in, and
 the same-`q` specialized path is materially lighter than a naive state-carrying
 baseline while still carrying a real verifier-visible statement boundary.

@@ -3,10 +3,6 @@
 This directory contains the Sonobe-derived Rust workspace used for the current
 reciprocal PoC.
 
-The reciprocal-specific path checked into this workspace is Pedersen-backed
-today. KZG is the next implementation milestone, not a completed feature in the
-current tree.
-
 ## What Lives Here
 
 - `crates/primitives`: reciprocal test circuits, seed-descriptor helpers, commitment code, and the kernel benchmark example

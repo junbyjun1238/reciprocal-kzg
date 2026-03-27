@@ -23,6 +23,5 @@ The reciprocal-specific PoC work in this repo is concentrated in:
 
 ## Scope Note
 
-The current reciprocal path checked into this workspace is Pedersen-backed. The
-repository goal is to replace that PoC opening path with a real KZG
-descriptor-opening library and integrated verifier flow.
+This workspace is the implementation root for the reciprocal PoC tracked by the
+repository.

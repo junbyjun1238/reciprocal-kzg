@@ -3,21 +3,22 @@
 This repository packages a reciprocal-folding backend project aimed at a KZG
 descriptor-opening path.
 
-The checked-in implementation is currently a Pedersen-backed PoC over a
-Sonobe-derived Rust workspace. The repository name reflects the target backend
-direction; it should not be read as "KZG is already implemented end to end."
+## Current Scope
+
+- The checked-in implementation is a Pedersen-backed reciprocal PoC over a Sonobe-derived Rust workspace.
+- The implemented path already includes the reciprocal kernel, adapter, wrapper, offchain decider, and benchmark artifacts.
+- The next implementation milestone is a real KZG descriptor-opening library and its integration path.
 
 ## Repository Layout
 
 - `poc/`: Sonobe-derived workspace plus reciprocal-specific implementation and integration code
 - `benchmark/`: canonical benchmark artifacts for the current PoC
-- `docs/`: paper note, PoC write-up, milestones, and reviewer-facing notes
+- `docs/`: paper note, PoC write-up, milestone plan, and public project documentation
 
 ## Current Status
 
 - The reciprocal kernel, adapter, wrapper, and offchain decider paths are implemented and tested in `poc/`.
-- The current opening path is Pedersen-backed.
-- The next implementation milestone is a real KZG descriptor-opening library and its integration path.
+- The benchmark package tracks both the Sonobe-integrated path and the arithmetic kernel path.
 
 ## Start Here
 

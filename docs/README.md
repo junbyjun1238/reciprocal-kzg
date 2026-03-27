@@ -1,6 +1,6 @@
 # docs
 
-Core paper PDFs, milestone notes, and reviewer-facing documentation.
+Core paper PDFs, the public PoC write-up, and the grant milestone plan.
 
 ## Main Files
 
