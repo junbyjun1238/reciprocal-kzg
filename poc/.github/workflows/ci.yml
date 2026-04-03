@@ -28,8 +28,9 @@ env:
   # Don't emit giant backtraces in the CI logs.
   RUST_BACKTRACE: short
 
-# Jobs launched for a PR event cancel the ongoing one for the same workflow + PR,
-# Only retries (of the same run) for a Push event cancel the prior one.
+# For PRs: groups by workflow + PR branch, cancelling stale runs for the same PR.
+# For pushes: head_ref is empty, so this falls back to run_id and only retries
+# of the same run cancel each other.
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
