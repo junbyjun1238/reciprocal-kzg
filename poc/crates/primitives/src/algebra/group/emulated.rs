@@ -129,7 +129,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        traits::{Inputize, InputizeEmulated},
+        traits::{ToEmulatedPublicInputs, ToPublicInputs},
         transcripts::Absorbable,
     };
 
@@ -159,7 +159,7 @@ mod tests {
     }
 
     #[test]
-    fn test_inputize() -> Result<(), Box<dyn Error>> {
+    fn test_to_public_inputs() -> Result<(), Box<dyn Error>> {
         let mut rng = thread_rng();
         let p = Projective::rand(&mut rng);
 
@@ -167,14 +167,14 @@ mod tests {
         let p_var = EmulatedAffineVar::<Fr, Projective>::new_witness(cs.clone(), || Ok(p))?;
         assert_eq!(
             [p_var.x.limbs.value()?, p_var.y.limbs.value()?].concat(),
-            p.inputize_emulated()
+            p.to_emulated_public_inputs()
         );
 
         let cs = ConstraintSystem::<Fq>::new_ref();
         let p_var = ProjectiveVar::<PallasConfig, FpVar<Fq>>::new_witness(cs.clone(), || Ok(p))?;
         assert_eq!(
             vec![p_var.x.value()?, p_var.y.value()?, p_var.z.value()?],
-            p.inputize()
+            p.to_public_inputs()
         );
         Ok(())
     }

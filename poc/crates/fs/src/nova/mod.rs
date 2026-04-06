@@ -102,7 +102,7 @@ mod tests {
     use super::*;
     use crate::tests::test_folding_scheme;
 
-    fn test_nova_opt<TF: SonobeField>(
+    fn run_nova_configs<TF: SonobeField>(
         rounds: usize,
         mut rng: impl RngCore,
     ) -> Result<(), Box<dyn Error>> {
@@ -156,8 +156,8 @@ mod tests {
     fn test_nova() -> Result<(), Box<dyn Error>> {
         let mut rng = thread_rng();
 
-        test_nova_opt::<Fr>(10, &mut rng)?;
-        test_nova_opt::<Fq>(10, &mut rng)?;
+        run_nova_configs::<Fr>(10, &mut rng)?;
+        run_nova_configs::<Fq>(10, &mut rng)?;
         Ok(())
     }
 }

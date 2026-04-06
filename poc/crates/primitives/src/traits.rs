@@ -25,24 +25,26 @@ impl<Cfg: Copy, A: Dummy<Cfg>, B: Dummy<Cfg>> Dummy<Cfg> for (A, B) {
     }
 }
 
-pub trait Inputize<F> {
-    fn inputize(&self) -> Vec<F>;
+pub trait ToPublicInputs<F> {
+    fn to_public_inputs(&self) -> Vec<F>;
 }
 
-impl<F, T: Inputize<F>> Inputize<F> for [T] {
-    fn inputize(&self) -> Vec<F> {
-        self.iter().flat_map(Inputize::<F>::inputize).collect()
+impl<F, T: ToPublicInputs<F>> ToPublicInputs<F> for [T] {
+    fn to_public_inputs(&self) -> Vec<F> {
+        self.iter()
+            .flat_map(ToPublicInputs::<F>::to_public_inputs)
+            .collect()
     }
 }
 
-pub trait InputizeEmulated<F> {
-    fn inputize_emulated(&self) -> Vec<F>;
+pub trait ToEmulatedPublicInputs<F> {
+    fn to_emulated_public_inputs(&self) -> Vec<F>;
 }
 
-impl<F, T: InputizeEmulated<F>> InputizeEmulated<F> for [T] {
-    fn inputize_emulated(&self) -> Vec<F> {
+impl<F, T: ToEmulatedPublicInputs<F>> ToEmulatedPublicInputs<F> for [T] {
+    fn to_emulated_public_inputs(&self) -> Vec<F> {
         self.iter()
-            .flat_map(InputizeEmulated::<F>::inputize_emulated)
+            .flat_map(ToEmulatedPublicInputs::<F>::to_emulated_public_inputs)
             .collect()
     }
 }

@@ -15,7 +15,7 @@ use ark_std::{
 use crate::{
     algebra::{Val, field::emulated::EmulatedFieldVar},
     circuits::WitnessToPublic,
-    traits::{Inputize, InputizeEmulated},
+    traits::{ToEmulatedPublicInputs, ToPublicInputs},
     transcripts::{Absorbable, AbsorbableVar},
 };
 
@@ -24,7 +24,7 @@ pub mod emulated;
 pub trait SonobeField:
     PrimeField<BasePrimeField = Self>
     + Absorbable
-    + Inputize<Self>
+    + ToPublicInputs<Self>
     + Val<
         Var: FieldVar<Self, Self> + WitnessToPublic,
         EmulatedVar<Self> = EmulatedFieldVar<Self, Self>,
@@ -72,14 +72,14 @@ impl<F: PrimeField> AbsorbableVar<F> for FpVar<F> {
     }
 }
 
-impl<P: FpConfig<N>, const N: usize> Inputize<Self> for Fp<P, N> {
-    fn inputize(&self) -> Vec<Self> {
+impl<P: FpConfig<N>, const N: usize> ToPublicInputs<Self> for Fp<P, N> {
+    fn to_public_inputs(&self) -> Vec<Self> {
         vec![*self]
     }
 }
 
-impl<F: SonobeField, P: SonobeField> InputizeEmulated<F> for P {
-    fn inputize_emulated(&self) -> Vec<F> {
+impl<F: SonobeField, P: SonobeField> ToEmulatedPublicInputs<F> for P {
+    fn to_emulated_public_inputs(&self) -> Vec<F> {
         self.into_bigint()
             .to_bits_le()
             .chunks(F::BITS_PER_LIMB)

@@ -56,7 +56,7 @@ impl ReciprocalOffchainDecider {
         statement: &ReciprocalCycleFoldStatement<CM>,
     ) -> ReciprocalOffchainDecision {
         ReciprocalOffchainDecision {
-            q_len: statement.instance.q.len(),
+            q_len: statement.instance.descriptor.len(),
             coordinate_count: statement.proof.coordinates.len(),
             public_input_len: statement.public_input_len(),
             has_opening_witness: statement.proof.opening_witness.is_some(),
@@ -101,13 +101,13 @@ mod tests {
         (
             ck,
             lane.clone(),
-            lane.bind(cm_x, y),
+            lane.bind_instance(cm_x, y),
             ReciprocalWitness { x, trace, omega },
         )
     }
 
     #[test]
-    fn test_reciprocal_offchain_decider_accepts_valid_opening_statement() {
+    fn test_decider_accepts_valid_opening_statement() {
         let (ck, lane, instance, witness) = sample_opening_bundle();
         let statement = ReciprocalCycleFoldAdapter::build_opening_statement_in_lane(
             &ck, &lane, &instance, witness,
@@ -127,13 +127,13 @@ mod tests {
     }
 
     #[test]
-    fn test_reciprocal_offchain_decider_rejects_descriptor_shape_mismatch() {
+    fn test_decider_rejects_descriptor_shape_mismatch() {
         let lane = ReciprocalSameQLane::<TestCM>::new_unchecked(vec![
             1_u64.into(),
             2_u64.into(),
             3_u64.into(),
         ]);
-        let instance = lane.bind(
+        let instance = lane.bind_instance(
             Default::default(),
             [10_u64.into(), 11_u64.into(), 12_u64.into(), 13_u64.into()],
         );
@@ -143,25 +143,25 @@ mod tests {
                 coordinates: [
                     super::super::reciprocal_wrapper::ReciprocalCoordinateClaim {
                         cm_x: Default::default(),
-                        q: vec![1_u64.into(), 2_u64.into(), 3_u64.into()],
+                        descriptor: vec![1_u64.into(), 2_u64.into(), 3_u64.into()],
                         coordinate: 0,
                         value: 10_u64.into(),
                     },
                     super::super::reciprocal_wrapper::ReciprocalCoordinateClaim {
                         cm_x: Default::default(),
-                        q: vec![1_u64.into(), 2_u64.into(), 3_u64.into()],
+                        descriptor: vec![1_u64.into(), 2_u64.into(), 3_u64.into()],
                         coordinate: 1,
                         value: 11_u64.into(),
                     },
                     super::super::reciprocal_wrapper::ReciprocalCoordinateClaim {
                         cm_x: Default::default(),
-                        q: vec![1_u64.into(), 2_u64.into(), 3_u64.into()],
+                        descriptor: vec![1_u64.into(), 2_u64.into(), 3_u64.into()],
                         coordinate: 2,
                         value: 12_u64.into(),
                     },
                     super::super::reciprocal_wrapper::ReciprocalCoordinateClaim {
                         cm_x: Default::default(),
-                        q: vec![1_u64.into(), 2_u64.into(), 3_u64.into()],
+                        descriptor: vec![1_u64.into(), 2_u64.into(), 3_u64.into()],
                         coordinate: 3,
                         value: 13_u64.into(),
                     },

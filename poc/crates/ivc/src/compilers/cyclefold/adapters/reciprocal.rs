@@ -4,7 +4,7 @@ use thiserror::Error;
 use super::{
     reciprocal_types::{
         ReciprocalPublicInstance, ReciprocalSameQLane, ReciprocalTypeError, ReciprocalWitness,
-        check_worked_n4_instance,
+        validate_worked_n4_instance,
     },
     reciprocal_wrapper::{ReciprocalAggregatedProof, ReciprocalWrapper, ReciprocalWrapperError},
 };
@@ -73,8 +73,8 @@ impl ReciprocalCycleFoldAdapter {
     {
         let mut public_inputs = Vec::new();
         public_inputs.push(Self::scalar_from_u64::<CM>(INSTANCE_DOMAIN_TAG));
-        public_inputs.push(Self::scalar_from_u64::<CM>(instance.q.len() as u64));
-        instance.q.absorb_into(&mut public_inputs);
+        public_inputs.push(Self::scalar_from_u64::<CM>(instance.descriptor.len() as u64));
+        instance.descriptor.absorb_into(&mut public_inputs);
         instance.y.absorb_into(&mut public_inputs);
         instance.cm_x.absorb_into(&mut public_inputs);
         public_inputs
@@ -92,8 +92,8 @@ impl ReciprocalCycleFoldAdapter {
 
         for claim in &proof.coordinates {
             public_inputs.push(Self::scalar_from_u64::<CM>(claim.coordinate as u64));
-            public_inputs.push(Self::scalar_from_u64::<CM>(claim.q.len() as u64));
-            claim.q.absorb_into(&mut public_inputs);
+            public_inputs.push(Self::scalar_from_u64::<CM>(claim.descriptor.len() as u64));
+            claim.descriptor.absorb_into(&mut public_inputs);
             claim.value.absorb_into(&mut public_inputs);
             claim.cm_x.absorb_into(&mut public_inputs);
         }
@@ -108,7 +108,7 @@ impl ReciprocalCycleFoldAdapter {
     where
         CM::Scalar: PrimeField,
     {
-        check_worked_n4_instance(instance)?;
+        validate_worked_n4_instance(instance)?;
         ReciprocalWrapper::verify(instance, proof)?;
         Ok(Self::flatten_public_inputs(instance, proof))
     }
@@ -305,7 +305,7 @@ mod tests {
     fn sample_instance() -> ReciprocalPublicInstance<TestCM> {
         ReciprocalPublicInstance {
             cm_x: Default::default(),
-            q: vec![1_u64.into(), 2_u64.into(), 3_u64.into(), 4_u64.into()],
+            descriptor: vec![1_u64.into(), 2_u64.into(), 3_u64.into(), 4_u64.into()],
             y: [10_u64.into(), 11_u64.into(), 12_u64.into(), 13_u64.into()],
         }
     }
@@ -326,13 +326,17 @@ mod tests {
             .expect("worked reciprocal evaluator should work");
         (
             ck,
-            ReciprocalPublicInstance { cm_x, q, y },
+            ReciprocalPublicInstance {
+                cm_x,
+                descriptor: q,
+                y,
+            },
             ReciprocalWitness { x, trace, omega },
         )
     }
 
     #[test]
-    fn test_reciprocal_adapter_flattens_instance_with_length_prefix() {
+    fn test_instance_public_inputs_include_length_prefix() {
         let instance = sample_instance();
         let public_inputs = ReciprocalCycleFoldAdapter::instance_public_inputs(&instance);
         let mut expected = vec![
@@ -340,10 +344,10 @@ mod tests {
                 &INSTANCE_DOMAIN_TAG.to_le_bytes(),
             ),
             <TestCM as CommitmentDef>::Scalar::from_le_bytes_mod_order(
-                &(instance.q.len() as u64).to_le_bytes(),
+                &(instance.descriptor.len() as u64).to_le_bytes(),
             ),
         ];
-        instance.q.absorb_into(&mut expected);
+        instance.descriptor.absorb_into(&mut expected);
         instance.y.absorb_into(&mut expected);
         instance.cm_x.absorb_into(&mut expected);
 
@@ -351,7 +355,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reciprocal_adapter_flattens_proof_with_coordinate_prefixes() {
+    fn test_proof_public_inputs_include_coordinate_prefixes() {
         let instance = sample_instance();
         let proof =
             ReciprocalWrapper::aggregate(&instance, ReciprocalWrapper::decompose(&instance))
@@ -369,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reciprocal_adapter_to_public_inputs_rejects_invalid_wrapper_proof() {
+    fn test_public_inputs_reject_invalid_wrapper_proof() {
         let instance = sample_instance();
         let mut coordinates = ReciprocalWrapper::decompose(&instance);
         coordinates[0].value = 99_u64.into();
@@ -387,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reciprocal_adapter_to_public_inputs_in_lane_rejects_descriptor_mismatch() {
+    fn test_lane_public_inputs_reject_descriptor_mismatch() {
         let instance = sample_instance();
         let proof =
             ReciprocalWrapper::aggregate(&instance, ReciprocalWrapper::decompose(&instance))
@@ -411,7 +415,7 @@ mod tests {
     #[test]
     fn test_reciprocal_adapter_build_statement_in_lane() {
         let instance = sample_instance();
-        let lane = ReciprocalSameQLane::<TestCM>::new(instance.q.clone())
+        let lane = ReciprocalSameQLane::<TestCM>::new(instance.descriptor.clone())
             .expect("worked instance should define a valid same-q lane");
         let statement = ReciprocalCycleFoldAdapter::build_statement_in_lane(&lane, &instance)
             .expect("same-q lane should accept the statement");
@@ -428,9 +432,9 @@ mod tests {
     }
 
     #[test]
-    fn test_reciprocal_adapter_verify_statement_in_lane_accepts_valid_statement() {
+    fn test_lane_statement_accepts_valid_statement() {
         let instance = sample_instance();
-        let lane = ReciprocalSameQLane::<TestCM>::new(instance.q.clone())
+        let lane = ReciprocalSameQLane::<TestCM>::new(instance.descriptor.clone())
             .expect("worked instance should define a valid same-q lane");
         let statement = ReciprocalCycleFoldAdapter::build_statement_in_lane(&lane, &instance)
             .expect("same-q lane should accept the statement");
@@ -442,9 +446,9 @@ mod tests {
     }
 
     #[test]
-    fn test_reciprocal_adapter_verify_statement_in_lane_rejects_tampered_output() {
+    fn test_lane_statement_rejects_tampered_output() {
         let instance = sample_instance();
-        let lane = ReciprocalSameQLane::<TestCM>::new(instance.q.clone())
+        let lane = ReciprocalSameQLane::<TestCM>::new(instance.descriptor.clone())
             .expect("worked instance should define a valid same-q lane");
         let mut statement = ReciprocalCycleFoldAdapter::build_statement_in_lane(&lane, &instance)
             .expect("same-q lane should accept the statement");
@@ -459,9 +463,9 @@ mod tests {
     }
 
     #[test]
-    fn test_reciprocal_adapter_verify_statement_rejects_public_input_mismatch() {
+    fn test_statement_rejects_public_input_mismatch() {
         let instance = sample_instance();
-        let lane = ReciprocalSameQLane::<TestCM>::new(instance.q.clone())
+        let lane = ReciprocalSameQLane::<TestCM>::new(instance.descriptor.clone())
             .expect("worked instance should define a valid same-q lane");
         let mut statement = ReciprocalCycleFoldAdapter::build_statement_in_lane(&lane, &instance)
             .expect("same-q lane should accept the statement");
@@ -476,7 +480,7 @@ mod tests {
     #[test]
     fn test_reciprocal_adapter_build_opening_statement_in_lane() {
         let (ck, instance, witness) = sample_opening_bundle();
-        let lane = ReciprocalSameQLane::<TestCM>::new(instance.q.clone())
+        let lane = ReciprocalSameQLane::<TestCM>::new(instance.descriptor.clone())
             .expect("worked instance should define a valid same-q lane");
         let statement = ReciprocalCycleFoldAdapter::build_opening_statement_in_lane(
             &ck, &lane, &instance, witness,
@@ -491,9 +495,9 @@ mod tests {
     }
 
     #[test]
-    fn test_reciprocal_adapter_verify_opening_statement_rejects_public_input_mismatch() {
+    fn test_opening_statement_rejects_public_input_mismatch() {
         let (ck, instance, witness) = sample_opening_bundle();
-        let lane = ReciprocalSameQLane::<TestCM>::new(instance.q.clone())
+        let lane = ReciprocalSameQLane::<TestCM>::new(instance.descriptor.clone())
             .expect("worked instance should define a valid same-q lane");
         let mut statement = ReciprocalCycleFoldAdapter::build_opening_statement_in_lane(
             &ck, &lane, &instance, witness,

@@ -59,14 +59,14 @@ impl<F: SonobeField, Cfg, const LHS_ALIGNED: bool> LimbedVar<F, Cfg, LHS_ALIGNED
         for (i, v) in self.limbs.iter().enumerate() {
             bounds[i] = bounds[i]
                 .add(&self.bounds[i])
-                .filter_safe::<F>()
+                .checked_for_field::<F>()
                 .ok_or(SynthesisError::Unsatisfiable)?;
             limbs[i] += v;
         }
         for (i, v) in other.limbs.iter().enumerate() {
             bounds[i] = bounds[i]
                 .add(&other.bounds[i])
-                .filter_safe::<F>()
+                .checked_for_field::<F>()
                 .ok_or(SynthesisError::Unsatisfiable)?;
             limbs[i] += v;
         }
@@ -82,14 +82,14 @@ impl<F: SonobeField, Cfg, const LHS_ALIGNED: bool> LimbedVar<F, Cfg, LHS_ALIGNED
         for (i, v) in self.limbs.iter().enumerate() {
             bounds[i] = bounds[i]
                 .add(&self.bounds[i])
-                .filter_safe::<F>()
+                .checked_for_field::<F>()
                 .ok_or(SynthesisError::Unsatisfiable)?;
             limbs[i] += v;
         }
         for (i, v) in other.limbs.iter().enumerate() {
             bounds[i] = bounds[i]
                 .sub(&other.bounds[i])
-                .filter_safe::<F>()
+                .checked_for_field::<F>()
                 .ok_or(SynthesisError::Unsatisfiable)?;
             limbs[i] -= v;
         }
@@ -102,61 +102,88 @@ impl<F: SonobeField, Cfg, const LHS_ALIGNED: bool> LimbedVar<F, Cfg, LHS_ALIGNED
     ) -> Result<LimbedVar<F, Cfg, false>, SynthesisError> {
         let len = self.limbs.len() + other.limbs.len() - 1;
         if self.limbs.is_constant() || other.limbs.is_constant() {
-            let bounds = (0..len)
-                .map(|i| {
-                    let start = max(i + 1, other.bounds.len()) - other.bounds.len();
-                    let end = min(i + 1, self.bounds.len());
-                    Bounds::add_many(
-                        &(start..end)
-                            .map(|j| self.bounds[j].mul(&other.bounds[i - j]))
-                            .collect::<Vec<_>>(),
-                    )
-                    .filter_safe::<F>()
-                })
-                .collect::<Option<Vec<_>>>()
-                .ok_or(SynthesisError::Unsatisfiable)?;
-
-            let limbs = (0..len)
-                .map(|i| {
-                    let start = max(i + 1, other.limbs.len()) - other.limbs.len();
-                    let end = min(i + 1, self.limbs.len());
-                    (start..end)
-                        .map(|j| &self.limbs[j] * &other.limbs[i - j])
-                        .sum()
-                })
-                .collect();
-            return Ok(LimbedVar::new(limbs, bounds));
+            return self.mul_constant_unaligned(other, len);
         }
-        let (limbs, bounds) = {
-            let cs = self.limbs.cs().or(other.limbs.cs());
-            let limbs = assignment_or_setup(
-                cs.clone(),
-                || vec![F::zero(); len],
-                || {
-                    let mut limbs = vec![F::zero(); len];
-                    for i in 0..self.limbs.len() {
-                        for j in 0..other.limbs.len() {
-                            limbs[i + j] += self.limbs[i].value()? * other.limbs[j].value()?;
-                        }
+        let (limbs, bounds) = self.allocate_mul_witness(other, len)?;
+        self.enforce_mul_relation(other, &limbs, len)?;
+
+        Ok(LimbedVar::new(limbs, bounds))
+    }
+
+    fn mul_constant_unaligned<const RHS_ALIGNED: bool>(
+        &self,
+        other: &LimbedVar<F, Cfg, RHS_ALIGNED>,
+        len: usize,
+    ) -> Result<LimbedVar<F, Cfg, false>, SynthesisError> {
+        let bounds = (0..len)
+            .map(|i| {
+                let start = max(i + 1, other.bounds.len()) - other.bounds.len();
+                let end = min(i + 1, self.bounds.len());
+                Bounds::add_many(
+                    &(start..end)
+                        .map(|j| self.bounds[j].mul(&other.bounds[i - j]))
+                        .collect::<Vec<_>>(),
+                )
+                .checked_for_field::<F>()
+            })
+            .collect::<Option<Vec<_>>>()
+            .ok_or(SynthesisError::Unsatisfiable)?;
+
+        let limbs = (0..len)
+            .map(|i| {
+                let start = max(i + 1, other.limbs.len()) - other.limbs.len();
+                let end = min(i + 1, self.limbs.len());
+                (start..end)
+                    .map(|j| &self.limbs[j] * &other.limbs[i - j])
+                    .sum()
+            })
+            .collect();
+
+        Ok(LimbedVar::new(limbs, bounds))
+    }
+
+    fn allocate_mul_witness<const RHS_ALIGNED: bool>(
+        &self,
+        other: &LimbedVar<F, Cfg, RHS_ALIGNED>,
+        len: usize,
+    ) -> Result<(Vec<FpVar<F>>, Vec<Bounds>), SynthesisError> {
+        let cs = self.limbs.cs().or(other.limbs.cs());
+        let limbs = assignment_or_setup(
+            cs.clone(),
+            || vec![F::zero(); len],
+            || {
+                let mut limbs = vec![F::zero(); len];
+                for i in 0..self.limbs.len() {
+                    for j in 0..other.limbs.len() {
+                        limbs[i + j] += self.limbs[i].value()? * other.limbs[j].value()?;
                     }
-                    Ok(limbs)
-                },
-            )?;
-            let mut bounds = vec![Bounds::zero(); len];
-            for i in 0..self.limbs.len() {
-                for j in 0..other.limbs.len() {
-                    bounds[i + j] = bounds[i + j].add(&self.bounds[i].mul(&other.bounds[j]))
                 }
+                Ok(limbs)
+            },
+        )?;
+        let mut bounds = vec![Bounds::zero(); len];
+        for i in 0..self.limbs.len() {
+            for j in 0..other.limbs.len() {
+                bounds[i + j] = bounds[i + j].add(&self.bounds[i].mul(&other.bounds[j]));
             }
-            (
-                Vec::new_variable_with_inferred_mode(cs, || Ok(limbs))?,
-                bounds
-                    .into_iter()
-                    .map(|b| b.filter_safe::<F>())
-                    .collect::<Option<_>>()
-                    .ok_or(SynthesisError::Unsatisfiable)?,
-            )
-        };
+        }
+
+        Ok((
+            Vec::new_variable_with_inferred_mode(cs, || Ok(limbs))?,
+            bounds
+                .into_iter()
+                .map(|bound| bound.checked_for_field::<F>())
+                .collect::<Option<_>>()
+                .ok_or(SynthesisError::Unsatisfiable)?,
+        ))
+    }
+
+    fn enforce_mul_relation<const RHS_ALIGNED: bool>(
+        &self,
+        other: &LimbedVar<F, Cfg, RHS_ALIGNED>,
+        limbs: &[FpVar<F>],
+        len: usize,
+    ) -> Result<(), SynthesisError> {
         for c in 1..=len {
             let c = F::from(c as u64);
             let mut t = F::one();
@@ -185,7 +212,7 @@ impl<F: SonobeField, Cfg, const LHS_ALIGNED: bool> LimbedVar<F, Cfg, LHS_ALIGNED
             l.mul_equals(&r, &o)?;
         }
 
-        Ok(LimbedVar::new(limbs, bounds))
+        Ok(())
     }
 
     pub fn enforce_equal_unaligned<const RHS_ALIGNED: bool>(
@@ -203,10 +230,12 @@ impl<F: SonobeField, Cfg, const LHS_ALIGNED: bool> LimbedVar<F, Cfg, LHS_ALIGNED
             .unwrap();
 
         for (limb, bounds) in diff.limbs.iter().zip(&diff.bounds) {
-            if let Some(new_group_bounds) = group_bounds.add(&bounds.shl(offset)).filter_safe::<F>()
+            if let Some(new_group_bounds) = group_bounds
+                .add(&bounds.shl(offset))
+                .checked_for_field::<F>()
             {
                 carry = (carry + limb) * inv;
-                carry_bounds = carry_bounds.add(bounds).shr_narrower(F::BITS_PER_LIMB);
+                carry_bounds = carry_bounds.add(bounds).shift_right_tight(F::BITS_PER_LIMB);
                 group_bounds = new_group_bounds;
                 offset += F::BITS_PER_LIMB;
             } else {
@@ -221,7 +250,7 @@ impl<F: SonobeField, Cfg, const LHS_ALIGNED: bool> LimbedVar<F, Cfg, LHS_ALIGNED
                 )?;
 
                 carry = (carry + limb) * inv;
-                carry_bounds = carry_bounds.add(bounds).shr_narrower(F::BITS_PER_LIMB);
+                carry_bounds = carry_bounds.add(bounds).shift_right_tight(F::BITS_PER_LIMB);
                 group_bounds = carry_bounds.clone();
                 offset = 0;
             }
@@ -239,39 +268,54 @@ impl<Base: SonobeField, Target: SonobeField, const LHS_ALIGNED: bool>
     pub fn modulo(&self) -> Result<LimbedVar<Base, Target, true>, SynthesisError> {
         let cs = self.cs();
         let m = BigInt::from_biguint(Sign::Plus, Target::MODULUS.into());
-        let (q, r) = {
-            let (q_value, r_value) = assignment_or_setup(
-                cs.clone(),
-                || (BigInt::zero(), BigInt::zero()),
-                || {
-                    let v = compose(self.limbs.value()?);
-                    let q = v.div_floor(&m);
-                    let r = v - &q * &m;
-                    Ok((q, r))
-                },
-            )?;
-
-            (
-                LimbedVar::new_variable_with_inferred_mode(cs.clone(), || {
-                    Ok((
-                        q_value,
-                        Bounds(self.lbound().div_floor(&m), self.ubound().div_floor(&m)),
-                    ))
-                })?,
-                LimbedVar::new_variable_with_inferred_mode(cs.clone(), || {
-                    Ok((r_value, Bounds(Zero::zero(), m.clone())))
-                })?,
-            )
-        };
-
-        let m = LimbedVar::constant(m);
-
-        q.mul_unaligned(&m)?
-            .add_unaligned(&r)?
-            .enforce_equal_unaligned(self)?;
-        r.enforce_lt(&m)?;
+        let (q, r) = self.allocate_modulo_witness(cs, &m)?;
+        self.enforce_modulo_relation(&q, &r, m)?;
 
         Ok(r)
+    }
+
+    fn allocate_modulo_witness(
+        &self,
+        cs: ConstraintSystemRef<Base>,
+        m: &BigInt,
+    ) -> Result<(LimbedVar<Base, Target, true>, LimbedVar<Base, Target, true>), SynthesisError>
+    {
+        let (q_value, r_value) = assignment_or_setup(
+            cs.clone(),
+            || (BigInt::zero(), BigInt::zero()),
+            || {
+                let v = compose(self.limbs.value()?);
+                let q = v.div_floor(m);
+                let r = v - &q * m;
+                Ok((q, r))
+            },
+        )?;
+
+        Ok((
+            LimbedVar::new_variable_with_inferred_mode(cs.clone(), || {
+                Ok((
+                    q_value,
+                    Bounds(self.lbound().div_floor(m), self.ubound().div_floor(m)),
+                ))
+            })?,
+            LimbedVar::new_variable_with_inferred_mode(cs, || {
+                Ok((r_value, Bounds(Zero::zero(), m.clone())))
+            })?,
+        ))
+    }
+
+    fn enforce_modulo_relation(
+        &self,
+        q: &LimbedVar<Base, Target, true>,
+        r: &LimbedVar<Base, Target, true>,
+        m: BigInt,
+    ) -> Result<(), SynthesisError> {
+        let m = LimbedVar::constant(m);
+        q.mul_unaligned(&m)?
+            .add_unaligned(r)?
+            .enforce_equal_unaligned(self)?;
+        r.enforce_lt(&m)?;
+        Ok(())
     }
 
     pub fn enforce_congruent<const RHS_ALIGNED: bool>(

@@ -288,7 +288,7 @@ mod tests {
         };
         let cs = ArithExtractor::new();
         cs.execute_synthesizer(circuit)?;
-        assert_eq!(cs.arith::<R1CS<_>>()?, constraints_for_test());
+        assert_eq!(cs.into_arith::<R1CS<_>>()?, constraints_for_test());
         Ok(())
     }
 

@@ -119,10 +119,10 @@ impl<F: Field, const ARITH_ENABLED: bool, const ASSIGNMENTS_ENABLED: bool>
         &self,
         circuit: impl ConstraintSynthesizer<F>,
     ) -> Result<(), SynthesisError> {
-        self.execute_fn(|cs| circuit.generate_constraints(cs))
+        self.run_with_constraint_system(|cs| circuit.generate_constraints(cs))
     }
 
-    pub fn execute_fn<R>(
+    pub fn run_with_constraint_system<R>(
         &self,
         circuit: impl FnOnce(ConstraintSystemRef<F>) -> Result<R, SynthesisError>,
     ) -> Result<R, SynthesisError> {
@@ -146,7 +146,7 @@ pub type ArithExtractor<F> = ConstraintSystemExt<F, true, false>;
 pub type AssignmentsExtractor<F> = ConstraintSystemExt<F, false, true>;
 
 impl<F: Field> ArithExtractor<F> {
-    pub fn arith<A: From<ConstraintSystem<F>>>(self) -> Result<A, SynthesisError> {
+    pub fn into_arith<A: From<ConstraintSystem<F>>>(self) -> Result<A, SynthesisError> {
         Ok(self.cs.into_inner().unwrap().into())
     }
 }

@@ -74,7 +74,7 @@ fn ambient_one() -> Ambient {
     [one(), zero(), zero(), zero()]
 }
 
-fn ambient_tau() -> Ambient {
+fn initial_orbit_point() -> Ambient {
     [zero(), one(), zero(), zero()]
 }
 
@@ -128,7 +128,7 @@ fn ambient_cube(mu_seed: [BaseField; 4], value: &Ambient) -> Ambient {
     ambient_mul(mu_seed, &ambient_square(mu_seed, value), value)
 }
 
-fn mul_matrix(mu_seed: [BaseField; 4], public_value: &Ambient) -> Matrix {
+fn build_multiplication_matrix(mu_seed: [BaseField; 4], public_value: &Ambient) -> Matrix {
     let mut matrix = [[zero(); 4]; 4];
     for column in 0..4 {
         let mut basis = ambient_zero();
@@ -184,7 +184,7 @@ fn solve_linear_system_4x4(matrix: Matrix, rhs: Ambient) -> Option<Ambient> {
 }
 
 fn ambient_inverse(mu_seed: [BaseField; 4], value: &Ambient) -> Option<Ambient> {
-    solve_linear_system_4x4(mul_matrix(mu_seed, value), ambient_one())
+    solve_linear_system_4x4(build_multiplication_matrix(mu_seed, value), ambient_one())
 }
 
 fn reciprocal_shift_descriptor_update(
@@ -212,11 +212,14 @@ fn round_shift(round: usize) -> BaseField {
     if round % 2 == 1 { zero() } else { one() }
 }
 
-fn expand_data(depth: usize, mu_seed: [BaseField; 4]) -> Result<ExpandedReciprocalData, String> {
+fn expand_reciprocal_data(
+    depth: usize,
+    mu_seed: [BaseField; 4],
+) -> Result<ExpandedReciprocalData, String> {
     let mut mu_by_round = Vec::with_capacity(depth);
     let mut r_by_round = Vec::with_capacity(depth + 1);
     let mut current_mu = mu_seed;
-    let mut current_r = ambient_tau();
+    let mut current_r = initial_orbit_point();
     let mut delta = ambient_one();
 
     mu_by_round.push(current_mu);
@@ -265,7 +268,7 @@ fn fold_pair_specialized(mu_i: [BaseField; 4], round: usize, lhs: State, rhs: St
     }
 }
 
-fn specialized_engine(mu_by_round: &[[BaseField; 4]], leaves: &[BaseField]) -> State {
+fn run_specialized_kernel(mu_by_round: &[[BaseField; 4]], leaves: &[BaseField]) -> State {
     assert!(leaves.len().is_power_of_two());
     assert_eq!(1_usize << mu_by_round.len(), leaves.len());
 
@@ -305,7 +308,7 @@ fn reconstruct_terminal_value(
     ambient_mul(mu_seed, &delta_inv, &numerator)
 }
 
-fn mat_vec_mul(matrix: &Matrix, vector: &Ambient) -> Ambient {
+fn multiply_matrix_by_ambient(matrix: &Matrix, vector: &Ambient) -> Ambient {
     let mut out = ambient_zero();
     for row in 0..4 {
         let mut acc = zero();
@@ -317,7 +320,7 @@ fn mat_vec_mul(matrix: &Matrix, vector: &Ambient) -> Ambient {
     out
 }
 
-fn direct_fixed_basis_engine(
+fn run_direct_basis_kernel(
     mu_seed: [BaseField; 4],
     r_by_round: &[Ambient],
     leaves: &[BaseField],
@@ -336,12 +339,12 @@ fn direct_fixed_basis_engine(
                 })
                 .collect();
         } else {
-            let matrix = mul_matrix(mu_seed, public_r);
+            let matrix = build_multiplication_matrix(mu_seed, public_r);
             layer = layer
                 .chunks_exact(2)
                 .map(|pair| {
                     let delta = ambient_sub(&pair[1], &pair[0]);
-                    ambient_add(&pair[0], &mat_vec_mul(&matrix, &delta))
+                    ambient_add(&pair[0], &multiply_matrix_by_ambient(&matrix, &delta))
                 })
                 .collect();
         }
@@ -375,7 +378,7 @@ fn build_branch_matrix(mu_i: [BaseField; 4], round: usize, right_branch: bool) -
     matrix
 }
 
-fn state_mat_vec_mul(matrix: &Matrix, vector: &State) -> State {
+fn multiply_matrix_by_state(matrix: &Matrix, vector: &State) -> State {
     let mut out = [zero(); 4];
     for row in 0..4 {
         let mut acc = zero();
@@ -387,7 +390,7 @@ fn state_mat_vec_mul(matrix: &Matrix, vector: &State) -> State {
     out
 }
 
-fn materialize_columns(mu_by_round: &[[BaseField; 4]]) -> Vec<State> {
+fn build_materialized_columns(mu_by_round: &[[BaseField; 4]]) -> Vec<State> {
     let depth = mu_by_round.len();
     if depth == 1 {
         return vec![
@@ -408,10 +411,10 @@ fn materialize_columns(mu_by_round: &[[BaseField; 4]]) -> Vec<State> {
 
         let mut next = Vec::with_capacity(columns.len() * 2);
         for column in &columns {
-            next.push(state_mat_vec_mul(&left, column));
+            next.push(multiply_matrix_by_state(&left, column));
         }
         for column in &columns {
-            next.push(state_mat_vec_mul(&right, column));
+            next.push(multiply_matrix_by_state(&right, column));
         }
         columns = next;
     }
@@ -459,8 +462,8 @@ fn assert_specialized_matches_direct(
     expanded: &ExpandedReciprocalData,
     leaves: &[BaseField],
 ) -> State {
-    let specialized_state = specialized_engine(&expanded.mu_by_round, leaves);
-    let direct_terminal = direct_fixed_basis_engine(mu_seed, &expanded.r_by_round, leaves);
+    let specialized_state = run_specialized_kernel(&expanded.mu_by_round, leaves);
+    let direct_terminal = run_direct_basis_kernel(mu_seed, &expanded.r_by_round, leaves);
     let reconstructed = reconstruct_terminal_value(
         mu_seed,
         specialized_state,
@@ -479,7 +482,7 @@ fn materialize_verified_columns(
     leaves: &[BaseField],
     specialized_state: State,
 ) -> Vec<State> {
-    let columns = materialize_columns(&expanded.mu_by_round);
+    let columns = build_materialized_columns(&expanded.mu_by_round);
     let row_state = evaluate_with_materialized_columns(&columns, leaves);
     assert_eq!(row_state, specialized_state);
     columns
@@ -494,7 +497,7 @@ fn benchmark_row(
     let leaves: Vec<BaseField> = (0..leaf_count).map(|_| BaseField::rand(rng)).collect();
 
     let expand_start = Instant::now();
-    let expanded = expand_data(depth, mu_seed)?;
+    let expanded = expand_reciprocal_data(depth, mu_seed)?;
     let expand_us = expand_start.elapsed().as_micros();
 
     let specialized_state = assert_specialized_matches_direct(mu_seed, &expanded, &leaves);
@@ -503,13 +506,13 @@ fn benchmark_row(
     let eval_repeats = repeats_for_problem_size(leaf_count, 1 << 20, 8);
     let materialize_repeats = repeats_for_problem_size(leaf_count, 1 << 18, 4);
     let specialized_eval_us = benchmark_average_us(eval_repeats, || {
-        specialized_engine(&expanded.mu_by_round, black_box(&leaves))
+        run_specialized_kernel(&expanded.mu_by_round, black_box(&leaves))
     });
     let direct_eval_us = benchmark_average_us(eval_repeats, || {
-        direct_fixed_basis_engine(mu_seed, black_box(&expanded.r_by_round), black_box(&leaves))
+        run_direct_basis_kernel(mu_seed, black_box(&expanded.r_by_round), black_box(&leaves))
     });
     let row_materialize_us = benchmark_average_us(materialize_repeats, || {
-        materialize_columns(black_box(&expanded.mu_by_round))
+        build_materialized_columns(black_box(&expanded.mu_by_round))
     });
     let row_eval_us = benchmark_average_us(eval_repeats, || {
         evaluate_with_materialized_columns(black_box(&columns), black_box(&leaves))

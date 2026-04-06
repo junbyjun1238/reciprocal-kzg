@@ -363,7 +363,7 @@ fn test_pow() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
-fn test_vec_vec_mul() -> Result<(), Box<dyn Error>> {
+fn test_vector_dot_product_constraints() -> Result<(), Box<dyn Error>> {
     let cs = ConstraintSystem::<Fr>::new_ref();
     let len = 1000;
 

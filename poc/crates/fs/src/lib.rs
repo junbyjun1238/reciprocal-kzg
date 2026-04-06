@@ -75,7 +75,7 @@ mod tests {
         Ok((ws.try_into().unwrap(), us.try_into().unwrap()))
     }
 
-    fn refresh_running_pool<FS: FoldingSchemeDecider, const M: usize>(
+    fn resample_running_pool<FS: FoldingSchemeDecider, const M: usize>(
         dk: &FS::DeciderKey,
         running_ws: &mut [FS::RW; M],
         running_us: &mut [FS::RU; M],
@@ -104,7 +104,7 @@ mod tests {
 
         let cs = ArithExtractor::new();
         cs.execute_synthesizer(circuit)?;
-        let arith = cs.arith()?;
+        let arith = cs.into_arith()?;
         let dk = FS::generate_keys(pp, arith)?;
         let pk = dk.to_pk();
         let vk = dk.to_vk();
@@ -123,7 +123,7 @@ mod tests {
             FS::decide_running(&dk, &WW, &UU)?;
             assert_eq!(FS::verify(vk, &mut transcript_v, &Us, &us, &pi)?, UU);
 
-            refresh_running_pool::<FS, M>(&dk, &mut Ws, &mut Us, &mut rng)?;
+            resample_running_pool::<FS, M>(&dk, &mut Ws, &mut Us, &mut rng)?;
             if M != 0 {
                 let idx = rng.gen_range(0..M);
                 Ws[idx] = WW;

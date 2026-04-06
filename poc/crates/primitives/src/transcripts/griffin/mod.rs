@@ -69,7 +69,7 @@ impl<F: PrimeField> GriffinParams<F> {
             .map(|i| i != 0)
             .skip_while(|i| !i)
             .collect();
-        let round_constants = Self::instantiate_rc(t, rounds, &mut shake);
+        let round_constants = Self::instantiate_round_constants(t, rounds, &mut shake);
         let alpha_beta = Self::instantiate_alpha_beta(t, &mut shake);
 
         let mat = Self::instantiate_matrix(t);
@@ -96,7 +96,11 @@ impl<F: PrimeField> GriffinParams<F> {
         shake.finalize_xof()
     }
 
-    fn instantiate_rc(t: usize, rounds: usize, shake: &mut Shake128Reader) -> Vec<Vec<F>> {
+    fn instantiate_round_constants(
+        t: usize,
+        rounds: usize,
+        shake: &mut Shake128Reader,
+    ) -> Vec<Vec<F>> {
         (0..rounds - 1)
             .map(|_| (0..t).map(|_| hash_to_field::<_, _, 128>(shake)).collect())
             .collect()
@@ -466,7 +470,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test() -> Result<(), Box<dyn Error>> {
+    fn test_hash_matches_gadget() -> Result<(), Box<dyn Error>> {
         let rng = &mut thread_rng();
         let params = GriffinParams::new(24, 5, 9);
         let t = params.t;
@@ -485,7 +489,7 @@ mod tests {
     }
 
     #[test]
-    fn test_consistent_perm() {
+    fn test_permutation_is_deterministic() {
         let rng = &mut thread_rng();
         let params = GriffinParams::new(3, 5, 12);
         let t = params.t;
@@ -511,7 +515,7 @@ mod tests {
         }
     }
 
-    fn matmul<F: PrimeField>(input: &[F], mat: &[Vec<F>]) -> Vec<F> {
+    fn multiply_matrix_by_vector<F: PrimeField>(input: &[F], mat: &[Vec<F>]) -> Vec<F> {
         let t = mat.len();
         debug_assert!(t == input.len());
         let mut out = vec![F::zero(); t];
@@ -525,7 +529,7 @@ mod tests {
         out
     }
 
-    fn test_affine_opt<F: PrimeField>(t: usize) {
+    fn check_affine_matches_matrix<F: PrimeField>(t: usize) {
         let rng = &mut thread_rng();
         let params = GriffinParams::<F>::new(t, 5, 1);
 
@@ -534,7 +538,7 @@ mod tests {
         for _ in 0..5 {
             let input: Vec<F> = (0..t).map(|_| F::rand(rng)).collect();
 
-            let output1 = matmul(&input, mat);
+            let output1 = multiply_matrix_by_vector(&input, mat);
             let mut output2 = input.to_owned();
             Griffin::affine(&params, &mut output2, 1);
             assert_eq!(output1, output2);
@@ -543,21 +547,21 @@ mod tests {
 
     #[test]
     fn test_affine_3() {
-        test_affine_opt::<Fr>(3);
+        check_affine_matches_matrix::<Fr>(3);
     }
 
     #[test]
     fn test_affine_4() {
-        test_affine_opt::<Fr>(4);
+        check_affine_matches_matrix::<Fr>(4);
     }
 
     #[test]
     fn test_affine_8() {
-        test_affine_opt::<Fr>(8);
+        check_affine_matches_matrix::<Fr>(8);
     }
 
     #[test]
     fn test_affine_60() {
-        test_affine_opt::<Fr>(60);
+        check_affine_matches_matrix::<Fr>(60);
     }
 }

@@ -16,9 +16,9 @@ pub trait Transcript<F: PrimeField>: Clone {
 
     fn new(config: &Self::Config) -> Self;
 
-    fn new_with_pp_hash(config: &Self::Config, pp_hash: F) -> Self {
+    fn new_with_public_parameter_hash(config: &Self::Config, public_parameter_hash: F) -> Self {
         let mut sponge = Self::new(config);
-        sponge.add_field_elements(&[pp_hash]);
+        sponge.add_field_elements(&[public_parameter_hash]);
         sponge
     }
 
@@ -85,12 +85,12 @@ pub trait TranscriptGadget<F: PrimeField>: Clone {
 
     fn new(config: &<Self::Widget as Transcript<F>>::Config) -> Self;
 
-    fn new_with_pp_hash(
+    fn new_with_public_parameter_hash(
         config: &<Self::Widget as Transcript<F>>::Config,
-        pp_hash: &FpVar<F>,
+        public_parameter_hash: &FpVar<F>,
     ) -> Result<Self, SynthesisError> {
         let mut sponge = Self::new(config);
-        sponge.add(&pp_hash)?;
+        sponge.add(public_parameter_hash)?;
         Ok(sponge)
     }
 

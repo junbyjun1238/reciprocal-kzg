@@ -10,7 +10,7 @@ use sonobe_primitives::commitments::{CommitmentDef, CommitmentOps};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReciprocalCoordinateClaim<CM: CommitmentDef> {
     pub cm_x: CM::Commitment,
-    pub q: Vec<CM::Scalar>,
+    pub descriptor: Vec<CM::Scalar>,
     pub coordinate: usize,
     pub value: CM::Scalar,
 }
@@ -50,7 +50,7 @@ impl ReciprocalWrapper {
     ) -> [ReciprocalCoordinateClaim<CM>; 4] {
         core::array::from_fn(|i| ReciprocalCoordinateClaim {
             cm_x: instance.cm_x.clone(),
-            q: instance.q.clone(),
+            descriptor: instance.descriptor.clone(),
             coordinate: i,
             value: instance.y[i],
         })
@@ -102,7 +102,8 @@ impl ReciprocalWrapper {
     {
         CM::open(ck, &witness.x, &witness.omega, &instance.cm_x)
             .map_err(|_| ReciprocalWrapperError::OpeningMismatch)?;
-        let (expected_trace, expected_y) = reciprocal_n4_trace_and_output(&instance.q, &witness.x)?;
+        let (expected_trace, expected_y) =
+            reciprocal_n4_trace_and_output(&instance.descriptor, &witness.x)?;
         if witness.trace.len() != RECIPROCAL_N4_TRACE_LEN || witness.trace != expected_trace {
             return Err(ReciprocalWrapperError::TraceMismatch);
         }
@@ -128,7 +129,8 @@ impl ReciprocalWrapper {
             .ok_or(ReciprocalWrapperError::MissingOpeningWitness)?;
         CM::open(ck, &witness.x, &witness.omega, &instance.cm_x)
             .map_err(|_| ReciprocalWrapperError::OpeningMismatch)?;
-        let (expected_trace, expected_y) = reciprocal_n4_trace_and_output(&instance.q, &witness.x)?;
+        let (expected_trace, expected_y) =
+            reciprocal_n4_trace_and_output(&instance.descriptor, &witness.x)?;
         if witness.trace.len() != RECIPROCAL_N4_TRACE_LEN || witness.trace != expected_trace {
             return Err(ReciprocalWrapperError::TraceMismatch);
         }
@@ -182,7 +184,7 @@ impl ReciprocalWrapper {
             if claim.cm_x != instance.cm_x {
                 return Err(ReciprocalWrapperError::CommitmentMismatch);
             }
-            if claim.q != instance.q {
+            if claim.descriptor != instance.descriptor {
                 return Err(ReciprocalWrapperError::DescriptorMismatch);
             }
             if claim.coordinate != i {
@@ -229,7 +231,7 @@ mod tests {
 
     type TestCM = Pedersen<G1Projective, true>;
 
-    fn sample_bundle() -> (
+    fn sample_wrapper_fixture() -> (
         <TestCM as sonobe_primitives::commitments::CommitmentDef>::Key,
         ReciprocalPublicInstance<TestCM>,
         ReciprocalWitness<TestCM>,
@@ -243,14 +245,18 @@ mod tests {
             TestCM::commit(&ck, &x, &mut rng).expect("commitment generation should work");
         let (trace, y) = reciprocal_n4_trace_and_output(&q, &x)
             .expect("worked reciprocal evaluator should work");
-        let instance = ReciprocalPublicInstance { cm_x, q, y };
+        let instance = ReciprocalPublicInstance {
+            cm_x,
+            descriptor: q,
+            y,
+        };
         let witness = ReciprocalWitness { x, trace, omega };
         (ck, instance, witness)
     }
 
     #[test]
     fn test_reciprocal_wrapper_accepts_consistent_proof() {
-        let (_, instance, _) = sample_bundle();
+        let (_, instance, _) = sample_wrapper_fixture();
         let proof =
             ReciprocalWrapper::aggregate(&instance, ReciprocalWrapper::decompose(&instance))
                 .expect("wrapper should accept self-consistent coordinates");
@@ -262,9 +268,9 @@ mod tests {
 
     #[test]
     fn test_reciprocal_wrapper_rejects_descriptor_mismatch() {
-        let (_, instance, _) = sample_bundle();
+        let (_, instance, _) = sample_wrapper_fixture();
         let mut coordinates = ReciprocalWrapper::decompose(&instance);
-        coordinates[2].q = vec![9_u64.into(), 9_u64.into(), 9_u64.into(), 9_u64.into()];
+        coordinates[2].descriptor = vec![9_u64.into(), 9_u64.into(), 9_u64.into(), 9_u64.into()];
 
         assert_eq!(
             ReciprocalWrapper::aggregate(&instance, coordinates),
@@ -274,7 +280,7 @@ mod tests {
 
     #[test]
     fn test_reciprocal_wrapper_rejects_commitment_mismatch() {
-        let (_, instance, _) = sample_bundle();
+        let (_, instance, _) = sample_wrapper_fixture();
         let mut coordinates = ReciprocalWrapper::decompose(&instance);
         coordinates[1].cm_x = G1Projective::generator();
 
@@ -286,7 +292,7 @@ mod tests {
 
     #[test]
     fn test_reciprocal_wrapper_rejects_output_mismatch() {
-        let (_, instance, _) = sample_bundle();
+        let (_, instance, _) = sample_wrapper_fixture();
         let mut coordinates = ReciprocalWrapper::decompose(&instance);
         coordinates[3].value = 99_u64.into();
 
@@ -298,8 +304,8 @@ mod tests {
 
     #[test]
     fn test_reciprocal_wrapper_verify_in_lane() {
-        let (_, instance, _) = sample_bundle();
-        let lane = ReciprocalSameQLane::<TestCM>::new(instance.q.clone())
+        let (_, instance, _) = sample_wrapper_fixture();
+        let lane = ReciprocalSameQLane::<TestCM>::new(instance.descriptor.clone())
             .expect("worked instance should define a valid same-q lane");
         let proof = ReciprocalAggregatedProof {
             coordinates: ReciprocalWrapper::decompose(&instance),
@@ -313,8 +319,8 @@ mod tests {
     }
 
     #[test]
-    fn test_reciprocal_wrapper_rejects_coordinate_position_mismatch() {
-        let (_, instance, _) = sample_bundle();
+    fn test_wrapper_rejects_wrong_coordinate_index() {
+        let (_, instance, _) = sample_wrapper_fixture();
         let mut coordinates = ReciprocalWrapper::decompose(&instance);
         coordinates[0] = ReciprocalCoordinateClaim {
             coordinate: 1,
@@ -332,7 +338,7 @@ mod tests {
 
     #[test]
     fn test_reciprocal_wrapper_prove_and_verify_opening() {
-        let (ck, instance, witness) = sample_bundle();
+        let (ck, instance, witness) = sample_wrapper_fixture();
         let proof = ReciprocalWrapper::prove_opening(&ck, &instance, witness)
             .expect("opening proof construction should work");
 
@@ -344,8 +350,8 @@ mod tests {
     }
 
     #[test]
-    fn test_reciprocal_wrapper_verify_opening_rejects_tampered_trace() {
-        let (ck, instance, witness) = sample_bundle();
+    fn test_verify_opening_rejects_tampered_trace() {
+        let (ck, instance, witness) = sample_wrapper_fixture();
         let mut proof = ReciprocalWrapper::prove_opening(&ck, &instance, witness)
             .expect("opening proof construction should work");
         let opening = proof
@@ -362,8 +368,8 @@ mod tests {
     }
 
     #[test]
-    fn test_reciprocal_wrapper_verify_opening_rejects_missing_witness() {
-        let (_, instance, _) = sample_bundle();
+    fn test_verify_opening_rejects_missing_witness() {
+        let (_, instance, _) = sample_wrapper_fixture();
         let proof =
             ReciprocalWrapper::aggregate(&instance, ReciprocalWrapper::decompose(&instance))
                 .expect("projection-only aggregation should still work");

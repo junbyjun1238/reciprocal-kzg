@@ -140,7 +140,7 @@ mod tests {
 
     use super::*;
 
-    pub fn test_ivc<I: IVC, F: FCircuit<Field = I::Field>>(
+    pub fn run_ivc_smoke_test<I: IVC, F: FCircuit<Field = I::Field>>(
         config: I::Config,
         step_circuit: F,
         external_inputs_vec: Vec<F::ExternalInputs>,

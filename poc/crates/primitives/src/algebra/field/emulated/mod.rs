@@ -82,17 +82,17 @@ impl Bounds {
         Self(&self.0 << shift, &self.1 << shift)
     }
 
-    pub fn shr_narrower(&self, shift: usize) -> Self {
+    pub fn shift_right_tight(&self, shift: usize) -> Self {
         let d = BigInt::from(1u64) << shift;
         Self(self.0.div_ceil(&d), self.1.div_floor(&d))
     }
 
-    pub fn shr_wider(&self, shift: usize) -> Self {
+    pub fn shift_right_loose(&self, shift: usize) -> Self {
         let d = BigInt::from(1u64) << shift;
         Self(self.0.div_floor(&d), self.1.div_ceil(&d))
     }
 
-    pub fn filter_safe<F: PrimeField>(self) -> Option<Self> {
+    pub fn checked_for_field<F: PrimeField>(self) -> Option<Self> {
         let limit = BigInt::from_biguint(Sign::Plus, F::MODULUS_MINUS_ONE_DIV_TWO.into());
         (self.0 >= -&limit && self.1 <= limit && &self.1 - &self.0 <= limit).then_some(self)
     }

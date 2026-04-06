@@ -145,7 +145,7 @@ where
     FC: FCircuit<Field = Fr, ExternalInputs = ()>,
 {
     let cs = ArithExtractor::<Fr>::new();
-    cs.execute_fn(|cs| {
+    cs.run_with_constraint_system(|cs| {
         let i = FpVar::new_witness(cs.clone(), || Ok(Fr::from(0_u64)))?;
         let state = <FC::StateVar as AllocVar<FC::State, Fr>>::new_witness(cs, || {
             Ok(step_circuit.dummy_state())
@@ -157,7 +157,7 @@ where
         )?;
         Ok(())
     })?;
-    let arith = cs.arith::<R1CS<Fr>>()?;
+    let arith = cs.into_arith::<R1CS<Fr>>()?;
     let cfg = arith.config();
     Ok((
         cfg.n_constraints(),
@@ -293,7 +293,7 @@ pub fn reciprocal_adapter_public_input_len(
     let ck = Pedersen::<C1, true>::generate_key(x.len(), &mut rng)?;
     let (cm_x, omega) = Pedersen::<C1, true>::commit(&ck, &x, &mut rng)?;
     let (trace, y) = reciprocal_n4_trace_and_output(&circuit.q, &x)?;
-    let instance = lane.bind(cm_x, y);
+    let instance = lane.bind_instance(cm_x, y);
     let witness = ReciprocalWitness::<Pedersen<C1, true>> { x, trace, omega };
     let statement = ReciprocalCycleFoldAdapter::build_opening_statement_in_lane(
         &ck, &lane, &instance, witness,

@@ -10,19 +10,19 @@ pub const RECIPROCAL_N4_TRACE_LEN: usize = 12;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReciprocalPublicInstance<CM: CommitmentDef> {
     pub cm_x: CM::Commitment,
-    pub q: Vec<CM::Scalar>,
+    pub descriptor: Vec<CM::Scalar>,
     pub y: ReciprocalOutput<CM::Scalar>,
 }
 
 impl<CM: CommitmentDef> ReciprocalPublicInstance<CM> {
-    pub fn same_q_as(&self, other: &Self) -> bool {
-        self.q == other.q
+    pub fn same_descriptor_as(&self, other: &Self) -> bool {
+        self.descriptor == other.descriptor
     }
 }
 
 impl<CM: CommitmentDef> Absorbable for ReciprocalPublicInstance<CM> {
     fn absorb_into<F: ark_ff::PrimeField>(&self, dest: &mut Vec<F>) {
-        self.q.absorb_into(dest);
+        self.descriptor.absorb_into(dest);
         self.y.absorb_into(dest);
         self.cm_x.absorb_into(dest);
     }
@@ -45,27 +45,27 @@ pub enum ReciprocalTypeError {
     InputLengthMismatch { expected: usize, actual: usize },
 }
 
-pub fn check_worked_n4_descriptor<S>(q: &[S]) -> Result<(), ReciprocalTypeError> {
-    if q.len() != RECIPROCAL_N4_INPUT_LEN {
+pub fn validate_worked_n4_descriptor<S>(descriptor: &[S]) -> Result<(), ReciprocalTypeError> {
+    if descriptor.len() != RECIPROCAL_N4_INPUT_LEN {
         return Err(ReciprocalTypeError::DescriptorLengthMismatch {
             expected: RECIPROCAL_N4_INPUT_LEN,
-            actual: q.len(),
+            actual: descriptor.len(),
         });
     }
     Ok(())
 }
 
-pub fn check_worked_n4_instance<CM: CommitmentDef>(
+pub fn validate_worked_n4_instance<CM: CommitmentDef>(
     instance: &ReciprocalPublicInstance<CM>,
 ) -> Result<(), ReciprocalTypeError> {
-    check_worked_n4_descriptor(&instance.q)
+    validate_worked_n4_descriptor(&instance.descriptor)
 }
 
 pub fn reciprocal_n4_trace_and_output<S: PrimeField>(
     q: &[S],
     x: &[S],
 ) -> Result<(Vec<S>, ReciprocalOutput<S>), ReciprocalTypeError> {
-    check_worked_n4_descriptor(q)?;
+    validate_worked_n4_descriptor(q)?;
     if x.len() != RECIPROCAL_N4_INPUT_LEN {
         return Err(ReciprocalTypeError::InputLengthMismatch {
             expected: RECIPROCAL_N4_INPUT_LEN,
@@ -104,45 +104,45 @@ pub fn reciprocal_n4_trace_and_output<S: PrimeField>(
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReciprocalSameQLane<CM: CommitmentDef> {
-    q: Vec<CM::Scalar>,
+    descriptor: Vec<CM::Scalar>,
 }
 
 impl<CM: CommitmentDef> ReciprocalSameQLane<CM> {
-    pub fn new(q: Vec<CM::Scalar>) -> Result<Self, ReciprocalTypeError> {
-        check_worked_n4_descriptor(&q)?;
-        Ok(Self { q })
+    pub fn new(descriptor: Vec<CM::Scalar>) -> Result<Self, ReciprocalTypeError> {
+        validate_worked_n4_descriptor(&descriptor)?;
+        Ok(Self { descriptor })
     }
 
     #[cfg(test)]
-    pub(crate) fn new_unchecked(q: Vec<CM::Scalar>) -> Self {
-        Self { q }
+    pub(crate) fn new_unchecked(descriptor: Vec<CM::Scalar>) -> Self {
+        Self { descriptor }
     }
 
-    pub fn q(&self) -> &[CM::Scalar] {
-        &self.q
+    pub fn descriptor(&self) -> &[CM::Scalar] {
+        &self.descriptor
     }
 
-    pub fn bind(
+    pub fn bind_instance(
         &self,
         cm_x: CM::Commitment,
         y: ReciprocalOutput<CM::Scalar>,
     ) -> ReciprocalPublicInstance<CM> {
         ReciprocalPublicInstance {
             cm_x,
-            q: self.q.clone(),
+            descriptor: self.descriptor.clone(),
             y,
         }
     }
 
     pub fn accepts(&self, instance: &ReciprocalPublicInstance<CM>) -> bool {
-        instance.q == self.q
+        instance.descriptor == self.descriptor
     }
 
     pub fn check_instance(
         &self,
         instance: &ReciprocalPublicInstance<CM>,
     ) -> Result<(), ReciprocalTypeError> {
-        check_worked_n4_instance(instance)?;
+        validate_worked_n4_instance(instance)?;
         if self.accepts(instance) {
             Ok(())
         } else {
@@ -150,7 +150,7 @@ impl<CM: CommitmentDef> ReciprocalSameQLane<CM> {
         }
     }
 
-    pub fn check_pair(
+    pub fn check_instance_pair(
         &self,
         left: &ReciprocalPublicInstance<CM>,
         right: &ReciprocalPublicInstance<CM>,
@@ -191,10 +191,10 @@ mod tests {
             4_u64.into(),
         ])
         .expect("worked N=4 descriptor should define a valid lane");
-        let instance = lane.bind(Default::default(), sample_output(10, 11, 12, 13));
+        let instance = lane.bind_instance(Default::default(), sample_output(10, 11, 12, 13));
 
         assert!(lane.accepts(&instance));
-        assert_eq!(lane.q(), instance.q.as_slice());
+        assert_eq!(lane.descriptor(), instance.descriptor.as_slice());
     }
 
     #[test]
@@ -206,18 +206,18 @@ mod tests {
             4_u64.into(),
         ])
         .expect("worked N=4 descriptor should define a valid lane");
-        let left = lane.bind(Default::default(), sample_output(1, 2, 3, 4));
+        let left = lane.bind_instance(Default::default(), sample_output(1, 2, 3, 4));
         let right = ReciprocalPublicInstance::<TestCM> {
             cm_x: Default::default(),
-            q: vec![9_u64.into(), 9_u64.into(), 9_u64.into(), 9_u64.into()],
+            descriptor: vec![9_u64.into(), 9_u64.into(), 9_u64.into(), 9_u64.into()],
             y: sample_output(5, 6, 7, 8),
         };
 
         assert_eq!(
-            lane.check_pair(&left, &right),
+            lane.check_instance_pair(&left, &right),
             Err(ReciprocalTypeError::DescriptorMismatch)
         );
-        assert!(!left.same_q_as(&right));
+        assert!(!left.same_descriptor_as(&right));
     }
 
     #[test]
@@ -231,7 +231,7 @@ mod tests {
         .expect("worked N=4 descriptor should define a valid lane");
         let instance = ReciprocalPublicInstance::<TestCM> {
             cm_x: Default::default(),
-            q: vec![1_u64.into(), 2_u64.into(), 3_u64.into()],
+            descriptor: vec![1_u64.into(), 2_u64.into(), 3_u64.into()],
             y: sample_output(5, 6, 7, 8),
         };
 

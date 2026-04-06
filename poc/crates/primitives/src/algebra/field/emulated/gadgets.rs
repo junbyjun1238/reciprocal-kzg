@@ -252,7 +252,7 @@ impl<CF: SonobeField, Cfg> MatrixGadget<LimbedVar<CF, Cfg, false>>
                                 })
                                 .collect::<Vec<_>>(),
                         )
-                        .filter_safe::<CF>()
+                        .checked_for_field::<CF>()
                     })
                     .collect::<Option<Vec<_>>>()
                     .ok_or(SynthesisError::Unsatisfiable)?;

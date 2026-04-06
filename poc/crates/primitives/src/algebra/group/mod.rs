@@ -13,7 +13,7 @@ use ark_relations::gr1cs::SynthesisError;
 use crate::{
     algebra::{Val, field::SonobeField, group::emulated::EmulatedAffineVar},
     circuits::WitnessToPublic,
-    traits::{Dummy, Inputize, InputizeEmulated},
+    traits::{Dummy, ToEmulatedPublicInputs, ToPublicInputs},
     transcripts::{Absorbable, AbsorbableVar},
 };
 
@@ -25,8 +25,8 @@ pub type CF2<C> = <<C as CurveGroup>::BaseField as Field>::BasePrimeField;
 pub trait SonobeCurve:
     CurveGroup<ScalarField: SonobeField, BaseField: SonobeField, Config: SWCurveConfig>
     + Absorbable
-    + Inputize<Self::BaseField>
-    + InputizeEmulated<Self::ScalarField>
+    + ToPublicInputs<Self::BaseField>
+    + ToEmulatedPublicInputs<Self::ScalarField>
     + Val<
         Var: CurveVar<Self, Self::BaseField> + AbsorbableVar<Self::BaseField> + WitnessToPublic,
         EmulatedVar<Self::ScalarField> = EmulatedAffineVar<Self::ScalarField, Self>,
@@ -73,8 +73,8 @@ impl<P: SWCurveConfig<BaseField: PrimeField>> AbsorbableVar<P::BaseField>
     }
 }
 
-impl<P: SWCurveConfig<BaseField: SonobeField>> Inputize<P::BaseField> for Projective<P> {
-    fn inputize(&self) -> Vec<P::BaseField> {
+impl<P: SWCurveConfig<BaseField: SonobeField>> ToPublicInputs<P::BaseField> for Projective<P> {
+    fn to_public_inputs(&self) -> Vec<P::BaseField> {
         let affine = self.into_affine();
         match affine.xy() {
             Some((x, y)) => vec![x, y, One::one()],
@@ -84,13 +84,13 @@ impl<P: SWCurveConfig<BaseField: SonobeField>> Inputize<P::BaseField> for Projec
 }
 
 impl<P: SWCurveConfig<BaseField: SonobeField, ScalarField: SonobeField>>
-    InputizeEmulated<P::ScalarField> for Projective<P>
+    ToEmulatedPublicInputs<P::ScalarField> for Projective<P>
 {
-    fn inputize_emulated(&self) -> Vec<P::ScalarField> {
+    fn to_emulated_public_inputs(&self) -> Vec<P::ScalarField> {
         let affine = self.into_affine();
         let (x, y) = affine.xy().unwrap_or_default();
 
-        [x, y].inputize_emulated()
+        [x, y].to_emulated_public_inputs()
     }
 }
 

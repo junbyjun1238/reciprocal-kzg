@@ -42,7 +42,7 @@ impl<C: SonobeCurve, const CHALLENGE_BITS: usize> Default
 impl<C: SonobeCurve, const CHALLENGE_BITS: usize> CycleFoldCircuit<CF2<C>>
     for NovaCycleFoldCircuit<C, CHALLENGE_BITS>
 {
-    fn verify_point_rlc(&self, cs: ConstraintSystemRef<CF2<C>>) -> Result<(), SynthesisError> {
+    fn enforce_point_rlc(&self, cs: ConstraintSystemRef<CF2<C>>) -> Result<(), SynthesisError> {
         let rho = FpVar::new_input(cs.clone(), || Ok(CF2::<C>::from_bits_le(&self.r[..])))?;
         let rho_bits = rho.to_n_bits_le(CHALLENGE_BITS)?;
 
@@ -241,7 +241,7 @@ mod tests {
             },
             reciprocal_wrapper::ReciprocalWrapperError,
         },
-        tests::test_ivc,
+        tests::run_ivc_smoke_test,
     };
 
     type TestIVC = NovaNovaIVC<Pedersen<C1, true>, Pedersen<C2, true>, GriffinSponge<Fr>>;
@@ -278,14 +278,14 @@ mod tests {
         let ck = <Pedersen<C1, true> as CommitmentOps>::generate_key(leaf_vector.len(), &mut *rng)?;
         let (cm_x, omega) =
             <Pedersen<C1, true> as CommitmentOps>::commit(&ck, &leaf_vector, &mut *rng)?;
-        let (trace, expected_y) = reciprocal_n4_trace_and_output(&lane.q().to_vec(), &leaf_vector)?;
+        let (trace, expected_y) = reciprocal_n4_trace_and_output(lane.descriptor(), &leaf_vector)?;
         assert_eq!(external_outputs, expected_y);
         let witness = ReciprocalWitness {
             x: leaf_vector,
             trace,
             omega,
         };
-        let instance = lane.bind(cm_x, external_outputs);
+        let instance = lane.bind_instance(cm_x, external_outputs);
         let statement = ReciprocalCycleFoldAdapter::build_opening_statement_in_lane(
             &ck, lane, &instance, witness,
         )?;
@@ -294,10 +294,13 @@ mod tests {
     }
 
     #[test]
-    fn test_nova_nova() -> Result<(), Box<dyn Error>> {
+    fn test_nova_ivc_roundtrip() -> Result<(), Box<dyn Error>> {
         let mut rng = thread_rng();
 
-        test_ivc::<NovaNovaIVC<Pedersen<C1, true>, Pedersen<C2, true>, GriffinSponge<_>>, _>(
+        run_ivc_smoke_test::<
+            NovaNovaIVC<Pedersen<C1, true>, Pedersen<C2, true>, GriffinSponge<_>>,
+            _,
+        >(
             (65536, 2048, Arc::new(GriffinParams::new(16, 5, 9))),
             CircuitForTest {
                 x: Fr::rand(&mut rng),
@@ -310,7 +313,7 @@ mod tests {
     }
 
     #[test]
-    fn test_nova_nova_reciprocal_circuit_outputs() -> Result<(), Box<dyn Error>> {
+    fn test_reciprocal_ivc_outputs_match_circuit() -> Result<(), Box<dyn Error>> {
         let mut rng = thread_rng();
         let (step_circuit, lane, pk, vk) = setup_reciprocal_ivc(&mut rng)?;
 
@@ -356,7 +359,7 @@ mod tests {
     }
 
     #[test]
-    fn test_nova_nova_reciprocal_statement_rejects_tampered_output() -> Result<(), Box<dyn Error>> {
+    fn test_reciprocal_statement_rejects_tampered_output() -> Result<(), Box<dyn Error>> {
         type TestIVC = NovaNovaIVC<Pedersen<C1, true>, Pedersen<C2, true>, GriffinSponge<Fr>>;
 
         let mut rng = thread_rng();
@@ -394,14 +397,14 @@ mod tests {
         let ck = <Pedersen<C1, true> as CommitmentOps>::generate_key(leaf_vector.len(), &mut rng)?;
         let (cm_x, omega) =
             <Pedersen<C1, true> as CommitmentOps>::commit(&ck, &leaf_vector, &mut rng)?;
-        let (trace, expected_y) = reciprocal_n4_trace_and_output(&lane.q().to_vec(), &leaf_vector)?;
+        let (trace, expected_y) = reciprocal_n4_trace_and_output(lane.descriptor(), &leaf_vector)?;
         assert_eq!(external_outputs, expected_y);
         let witness = ReciprocalWitness {
             x: leaf_vector,
             trace,
             omega,
         };
-        let instance = lane.bind(cm_x, external_outputs);
+        let instance = lane.bind_instance(cm_x, external_outputs);
         let mut statement = ReciprocalCycleFoldAdapter::build_opening_statement_in_lane(
             &ck, &lane, &instance, witness,
         )?;
@@ -418,8 +421,7 @@ mod tests {
     }
 
     #[test]
-    fn test_nova_nova_reciprocal_statement_rejects_wrong_descriptor_lane()
-    -> Result<(), Box<dyn Error>> {
+    fn test_reciprocal_statement_rejects_wrong_lane() -> Result<(), Box<dyn Error>> {
         type TestIVC = NovaNovaIVC<Pedersen<C1, true>, Pedersen<C2, true>, GriffinSponge<Fr>>;
 
         let mut rng = thread_rng();
@@ -463,14 +465,14 @@ mod tests {
         let ck = <Pedersen<C1, true> as CommitmentOps>::generate_key(leaf_vector.len(), &mut rng)?;
         let (cm_x, omega) =
             <Pedersen<C1, true> as CommitmentOps>::commit(&ck, &leaf_vector, &mut rng)?;
-        let (trace, expected_y) = reciprocal_n4_trace_and_output(&lane.q().to_vec(), &leaf_vector)?;
+        let (trace, expected_y) = reciprocal_n4_trace_and_output(lane.descriptor(), &leaf_vector)?;
         assert_eq!(external_outputs, expected_y);
         let witness = ReciprocalWitness {
             x: leaf_vector,
             trace,
             omega,
         };
-        let instance = lane.bind(cm_x, external_outputs);
+        let instance = lane.bind_instance(cm_x, external_outputs);
         let statement = ReciprocalCycleFoldAdapter::build_opening_statement_in_lane(
             &ck, &lane, &instance, witness,
         )?;
@@ -490,7 +492,7 @@ mod tests {
     }
 
     #[test]
-    fn test_nova_nova_naive_reciprocal_circuit_outputs() -> Result<(), Box<dyn Error>> {
+    fn test_naive_reciprocal_ivc_outputs_match_circuit() -> Result<(), Box<dyn Error>> {
         type TestIVC = NovaNovaIVC<Pedersen<C1, true>, Pedersen<C2, true>, GriffinSponge<Fr>>;
 
         let mut rng = thread_rng();
