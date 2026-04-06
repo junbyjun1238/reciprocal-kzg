@@ -1,6 +1,3 @@
-//! This module defines a zero-cost placeholder type that have well-defined
-//! arithmetic operations.
-
 use ark_ff::Field;
 use ark_r1cs_std::{
     GR1CSVar,
@@ -14,11 +11,6 @@ use ark_std::{
     ops::{Add, Mul},
 };
 
-/// [`Null`] is a zero-sized type that absorbs any arithmetic and always returns
-/// itself.
-///
-/// It also has itself as its in-circuit representation, which does not allocate
-/// any variables or require any constraints.
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub struct Null;
 

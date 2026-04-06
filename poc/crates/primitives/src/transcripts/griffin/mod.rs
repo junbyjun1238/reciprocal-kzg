@@ -1,24 +1,4 @@
-//! Implementation of the Griffin circuit-friendly hash function and its
-//! parameter generation, as well as out-of-circuit widgets and in-circuit
-//! gadgets for permutation, hashing, sponges, and transcripts.
-//!
-//! According to the Griffin [paper], it is very efficient in terms of the
-//! number of constraints, but later an [attack] on Griffin and similar hash
-//! functions was discovered.
-//! Therefore, it is recommended to avoid using Griffin in production.
-//!
-//! The code is forked from the [implementation] in the Hash Functions for
-//! Zero-Knowledge Applications Zoo but uses arkworks instead of bellman as the
-//! underlying cryptographic library.
-//!
-//! [paper]: https://eprint.iacr.org/2022/403.pdf
-//! [attack]: https://eprint.iacr.org/2024/347.pdf
-//! [implementation]: https://extgit.isec.tugraz.at/krypto/zkfriendlyhashzoo
-
-// Below we attach Hash functions for Zero-Knowledge applications Zoo's original
-// license notice.
-//
-// Copyright (c) 2021 Graz University of Technology
+﻿// Copyright (c) 2021 Graz University of Technology
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -52,12 +32,10 @@ use sha3::{
     digest::{ExtendableOutput, Update, XofReader},
 };
 
+use crate::utils::assignments::assignment_or_setup;
+
 pub mod sponge;
 
-/// [`GriffinParams`] stores the full parameterisation of the Griffin
-/// permutation for a given prime field: state width `t`, S-box degree `d`,
-/// number of rounds, round constants, alpha/beta constants, and the MDS-like
-/// matrix.
 #[derive(Clone, Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct GriffinParams<F: PrimeField> {
     round_constants: Vec<Vec<F>>,
@@ -74,8 +52,6 @@ pub struct GriffinParams<F: PrimeField> {
 impl<F: PrimeField> GriffinParams<F> {
     const INIT_SHAKE: &'static str = "Griffin";
 
-    /// [`GriffinParams::new`] constructs new Griffin parameters with the given
-    /// state width `t`, S-box degree `d`, and number of rounds `rounds`.
     pub fn new(t: usize, d: usize, rounds: usize) -> Self {
         // Equivalent to `assert!(t == 3 || t % 4 == 0);`, but bypass clippy's
         // warning about `is_multiple_of`.
@@ -138,11 +114,9 @@ impl<F: PrimeField> GriffinParams<F> {
 
         let mut alpha_beta = Vec::with_capacity(t - 2);
 
-        // random alpha/beta
         loop {
             let alpha = hash_to_non_zero_field::<F>(shake);
             let mut beta = hash_to_non_zero_field::<F>(shake);
-            // distinct
             while alpha == beta {
                 beta = hash_to_non_zero_field::<F>(shake);
             }
@@ -158,20 +132,17 @@ impl<F: PrimeField> GriffinParams<F> {
             }
         }
 
-        // other alphas/betas
         for i in 2..t - 1 {
             let mut alpha = alpha_beta[0][0];
             let mut beta = alpha_beta[0][1];
             alpha.mul_assign(&F::from(i as u64));
             beta.mul_assign(&F::from((i * i) as u64));
-            // distinct
             while alpha == beta {
                 beta = hash_to_non_zero_field::<F>(shake);
             }
 
             #[cfg(debug_assertions)]
             {
-                // check if really ok
                 let mut symbol = alpha;
                 symbol.square_in_place();
                 let mut tmp = beta;
@@ -226,22 +197,19 @@ impl<F: PrimeField> GriffinParams<F> {
     }
 }
 
-/// [`Griffin`] implements the Griffin permutation and Griffin hash.
 pub struct Griffin;
 
 impl Griffin {
     fn affine_3<F: PrimeField>(params: &GriffinParams<F>, input: &mut [F], round: usize) {
-        // multiplication by circ(2 1 1) is equal to state + sum(state)
         let mut sum = input[0];
         input.iter().skip(1).for_each(|el| sum.add_assign(el));
 
         if round < params.rounds - 1 {
             for (el, rc) in input.iter_mut().zip(params.round_constants[round].iter()) {
                 el.add_assign(&sum);
-                el.add_assign(rc); // add round constant
+                el.add_assign(rc);
             }
         } else {
-            // no round constant
             for el in input.iter_mut() {
                 el.add_assign(&sum);
             }
@@ -293,7 +261,6 @@ impl Griffin {
             return;
         }
 
-        // first matrix
         let t4 = params.t / 4;
         for i in 0..t4 {
             let start_index = i * 4;
@@ -321,7 +288,6 @@ impl Griffin {
             input[start_index + 3] = t_4;
         }
 
-        // second matrix
         let mut stored = [F::zero(); 4];
         for l in 0..4 {
             stored[l] = input[l];
@@ -333,13 +299,12 @@ impl Griffin {
         for i in 0..input.len() {
             input[i].add_assign(&stored[i % 4]);
             if round < params.rounds - 1 {
-                input[i].add_assign(&params.round_constants[round][i]); // add round constant
+                input[i].add_assign(&params.round_constants[round][i]);
             }
         }
     }
 
     fn non_linear<F: PrimeField>(params: &GriffinParams<F>, input: &mut [F]) {
-        // first two state words
         input[0] = {
             let mut res = F::one();
             for &i in &params.d_inv {
@@ -364,7 +329,6 @@ impl Griffin {
         input[1].mul_assign(&state);
 
         let mut y01_i = input[1];
-        // rest of the state
         for i in 2..input.len() {
             y01_i += input[0];
             let l = if i == 2 { y01_i } else { y01_i + state };
@@ -374,10 +338,8 @@ impl Griffin {
         }
     }
 
-    /// [`Griffin::permute`] applies the Griffin permutation to the given input
-    /// state `input` in place under parameters `params`.
     pub fn permute<F: PrimeField>(params: &GriffinParams<F>, input: &mut [F]) {
-        Griffin::affine(params, input, params.rounds); // no RC
+        Griffin::affine(params, input, params.rounds);
 
         for r in 0..params.rounds {
             Griffin::non_linear(params, input);
@@ -385,9 +347,6 @@ impl Griffin {
         }
     }
 
-    /// [`Griffin::hash`] implements the Griffin hash function based on the
-    /// sponge construction, which produces a single field element as the digest
-    /// of the given message `message` under parameters `params`.
     pub fn hash<F: PrimeField>(params: &GriffinParams<F>, message: &[F]) -> F {
         let mut state = vec![F::zero(); params.t];
         for chunk in message.chunks(params.rate) {
@@ -400,8 +359,6 @@ impl Griffin {
     }
 }
 
-/// [`GriffinGadget`] implements the gadgets for Griffin permutation and Griffin
-/// hash.
 pub struct GriffinGadget;
 
 impl GriffinGadget {
@@ -411,20 +368,17 @@ impl GriffinGadget {
     ) -> Result<Vec<FpVar<F>>, SynthesisError> {
         let cs = state.cs();
         let mut result = state.to_owned();
-        // x0
         result[0] = FpVar::new_variable_with_inferred_mode(cs, || {
-            Ok({
-                {
-                    let v = result[0].value().unwrap_or_default();
-                    let mut res = F::one();
-                    for &i in &params.d_inv {
-                        res.square_in_place();
-                        if i {
-                            res *= v;
-                        }
+            assignment_or_setup(result[0].cs(), F::zero, || {
+                let v = result[0].value()?;
+                let mut res = F::one();
+                for &i in &params.d_inv {
+                    res.square_in_place();
+                    if i {
+                        res *= v;
                     }
-                    res
                 }
+                Ok(res)
             })
         })?;
 
@@ -434,7 +388,6 @@ impl GriffinGadget {
         }
         result[0].mul_equals(&sq, &state[0])?;
 
-        // x1
         let mut sq = result[1].square()?;
         if params.d == 5 {
             sq = sq.square()?;
@@ -443,7 +396,6 @@ impl GriffinGadget {
 
         let mut y01_i = result[1].clone();
 
-        // rest of the state
         for i in 2..result.len() {
             y01_i += &result[0];
             let l = if i == 2 {
@@ -458,8 +410,6 @@ impl GriffinGadget {
         Ok(result)
     }
 
-    /// [`GriffinGadget::permute`] applies the Griffin permutation to the given
-    /// input state variables `input` in place under parameters `params`.
     pub fn permute<F: PrimeField>(
         params: &GriffinParams<F>,
         state: &[FpVar<F>],
@@ -489,9 +439,6 @@ impl GriffinGadget {
         Ok(current_state)
     }
 
-    /// [`GriffinGadget::hash`] implements the gadget for Griffin hash based on
-    /// the sponge construction, which produces a single field element variable
-    /// as the digest of the given message `message` under parameters `params`.
     pub fn hash<F: PrimeField>(
         params: &GriffinParams<F>,
         message: &[FpVar<F>],
@@ -587,7 +534,6 @@ mod tests {
         for _ in 0..5 {
             let input: Vec<F> = (0..t).map(|_| F::rand(rng)).collect();
 
-            // affine 1
             let output1 = matmul(&input, mat);
             let mut output2 = input.to_owned();
             Griffin::affine(&params, &mut output2, 1);

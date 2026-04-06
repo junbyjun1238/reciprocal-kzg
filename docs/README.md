@@ -1,6 +1,8 @@
 # docs
 
-Core paper PDFs, the public PoC write-up, and the grant milestone plan.
+This folder contains the longer project documents. The root README provides the
+repository overview, and `../benchmark/README.md` covers benchmark-specific
+artifacts and reproduction.
 
 ## Main Files
 

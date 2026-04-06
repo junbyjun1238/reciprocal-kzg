@@ -1,5 +1,3 @@
-//! Utility types shared across folding scheme definitions.
-
 use ark_ff::{Field, PrimeField};
 use ark_r1cs_std::{
     GR1CSVar,
@@ -22,11 +20,6 @@ use rayon::{
 };
 use sonobe_primitives::transcripts::{Absorbable, AbsorbableVar};
 
-/// [`TaggedVec`] is a wrapper around a vector that additionally carries a
-/// compile-time `char` tag.
-///
-/// This is used to create nominally distinct vector types that are structurally
-/// identical.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TaggedVec<V, const TAG: char>(pub Vec<V>);
 

@@ -1,6 +1,3 @@
-//! Definitions of out-of-circuit values and in-circuit variables for Nova
-//! instances.
-
 use ark_ff::PrimeField;
 use sonobe_primitives::{
     arithmetizations::ArithConfig, commitments::CommitmentDef, traits::Dummy,
@@ -11,16 +8,11 @@ use crate::FoldingInstance;
 
 pub mod circuits;
 
-/// [`RunningInstance`] defines Nova's running instance.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RunningInstance<CM: CommitmentDef> {
-    /// [`RunningInstance::cm_e`] is the error term commitment.
     pub cm_e: CM::Commitment,
-    /// [`RunningInstance::u`] is the constant term.
     pub u: CM::Scalar,
-    /// [`RunningInstance::cm_w`] is the witness commitment.
     pub cm_w: CM::Commitment,
-    /// [`RunningInstance::x`] is the vector of public inputs (to the circuit).
     pub x: Vec<CM::Scalar>,
 }
 
@@ -60,12 +52,9 @@ impl<CM: CommitmentDef> Absorbable for RunningInstance<CM> {
     }
 }
 
-/// [`IncomingInstance`] defines Nova's incoming instance.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IncomingInstance<CM: CommitmentDef> {
-    /// [`IncomingInstance::cm_w`] is the witness commitment.
     pub cm_w: CM::Commitment,
-    /// [`IncomingInstance::x`] is the vector of public inputs (to the circuit).
     pub x: Vec<CM::Scalar>,
 }
 

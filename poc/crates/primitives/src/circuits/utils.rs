@@ -1,5 +1,3 @@
-//! This module provides utility circuits.
-
 use ark_ff::{Field, PrimeField};
 use ark_r1cs_std::{
     GR1CSVar,
@@ -15,39 +13,25 @@ use crate::{
     traits::SonobeField,
 };
 
-/// [`CircuitForTest`] implements a simple test circuit computing
-/// `y = x^3 + x + 5` with 4 R1CS constraints.
-///
-/// It is used in unit tests to verify constraint extraction and witness
-/// generation.
 pub struct CircuitForTest<F: PrimeField> {
-    /// [`CircuitForTest::x`] is the input variable `x` of the circuit.
     pub x: F,
 }
 
 impl<F: PrimeField> ConstraintSynthesizer<F> for CircuitForTest<F> {
     fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
-        // Variable 0 (implicitly added by arkworks as 1)
-        // Variable 1
         let x = AllocatedFp::new_input(cs.clone(), || Ok(self.x))?;
-        // Variable 2
         let y = AllocatedFp::new_witness(cs.clone(), || Ok(self.x.pow([3]) + self.x + F::from(5)))?;
 
-        // Variable 3, Constraint 0
         let x_square = x.square()?;
-        // Variable 4, Constraint 1
         let x_cube = x_square.mul(&x);
-        // Variable 5
         let t = AllocatedFp::new_witness(cs.clone(), || Ok(self.x.pow([3]) + self.x))?;
         let x_cube_plus_x = x.add(&x_cube);
-        // Constraint 2
         cs.enforce_r1cs_constraint(
             || x_cube_plus_x.variable.into(),
             || Variable::one().into(),
             || t.variable.into(),
         )?;
         let x_cube_plus_x_plus_5 = t.add_constant(F::from(5));
-        // Constraint 3
         cs.enforce_r1cs_constraint(
             || x_cube_plus_x_plus_5.variable.into(),
             || Variable::one().into(),
@@ -79,33 +63,25 @@ impl<F: SonobeField> FCircuit for CircuitForTest<F> {
     ) -> Result<(Self::StateVar, Self::ExternalOutputs), SynthesisError> {
         let cs = z_i.cs();
 
-        // Variable 0 (implicitly added by arkworks as 1)
-        // Variable 1
         let x = if let FpVar::Var(x) = z_i[0].clone() {
             x
         } else {
             unreachable!()
         };
-        // Variable 2
         let y = AllocatedFp::new_witness(cs.clone(), || {
             Ok(x.value()?.pow([3]) + x.value()? + F::from(5))
         })?;
 
-        // Variable 3, Constraint 0
         let x_square = x.square()?;
-        // Variable 4, Constraint 1
         let x_cube = x_square.mul(&x);
-        // Variable 5
         let t = AllocatedFp::new_witness(cs.clone(), || Ok(x.value()?.pow([3]) + x.value()?))?;
         let x_cube_plus_x = x.add(&x_cube);
-        // Constraint 2
         cs.enforce_r1cs_constraint(
             || x_cube_plus_x.variable.into(),
             || Variable::one().into(),
             || t.variable.into(),
         )?;
         let x_cube_plus_x_plus_5 = t.add_constant(F::from(5));
-        // Constraint 3
         cs.enforce_r1cs_constraint(
             || x_cube_plus_x_plus_5.variable.into(),
             || Variable::one().into(),
@@ -115,11 +91,8 @@ impl<F: SonobeField> FCircuit for CircuitForTest<F> {
     }
 }
 
-/// [`constraints_for_test`] returns the R1CS constraints for the test circuit.
 #[allow(non_snake_case)]
 pub fn constraints_for_test<F: Field>() -> R1CS<F> {
-    // R1CS for: x^3 + x + 5 = y (example from article
-    // https://vitalik.eth.limo/general/2016/12/10/qap.html)
     let A = vec![
         vec![(F::one(), 1)],
         vec![(F::one(), 3)],
@@ -142,17 +115,10 @@ pub fn constraints_for_test<F: Field>() -> R1CS<F> {
     R1CS::<F>::new(R1CSConfig::new(4, 6, 1), [A, B, C])
 }
 
-/// [`satisfying_assignments_for_test`] returns a satisfying assignment for the
-/// test circuit given an input `x`.
 pub fn satisfying_assignments_for_test<F: Field>(x: F) -> Assignments<F, Vec<F>> {
     Assignments::from((
         F::one(),
         vec![x],
-        vec![
-            x * x * x + x + F::from(5), // x^3 + x + 5
-            x * x,                      // x^2
-            x * x * x,                  // x^2 * x
-            x * x * x + x,              // x^3 + x
-        ],
+        vec![x * x * x + x + F::from(5), x * x, x * x * x, x * x * x + x],
     ))
 }

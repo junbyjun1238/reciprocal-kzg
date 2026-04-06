@@ -1,15 +1,10 @@
-//! This module defines traits for conversion between bit representations and
-//! algebraic types inside and outside circuits.
-
 use ark_ff::{BigInteger, PrimeField};
 use ark_r1cs_std::{GR1CSVar, alloc::AllocVar, boolean::Boolean, eq::EqGadget, fields::fp::FpVar};
 use ark_relations::gr1cs::SynthesisError;
 
-use crate::algebra::field::emulated::Bounds;
+use crate::{algebra::field::emulated::Bounds, utils::assignments::assignment_or_setup};
 
-/// [`FromBits`] reconstructs a value from bits.
 pub trait FromBits {
-    /// [`FromBits::from_bits_le`] computes a value from its little-endian bits.
     fn from_bits_le(bits: &[bool]) -> Self;
 }
 
@@ -19,32 +14,15 @@ impl<F: PrimeField> FromBits for F {
     }
 }
 
-/// [`FromBitsGadget`] is the in-circuit counterpart of [`FromBits`], which
-/// reconstructs an in-circuit variable from boolean variables.
 pub trait FromBitsGadget<F: PrimeField>: Sized {
-    /// [`FromBitsGadget::from_bits_le`] computes a variable from its
-    /// little-endian bits, inferring bounds from the length of `bits`.
     fn from_bits_le(bits: &[Boolean<F>]) -> Result<Self, SynthesisError>;
 
-    /// [`FromBitsGadget::from_bounded_bits_le`] computes a variable from its
-    /// little-endian bits with explicitly supplied [`Bounds`].
     fn from_bounded_bits_le(bits: &[Boolean<F>], bounds: Bounds) -> Result<Self, SynthesisError>;
 }
 
-/// [`ToBitsGadgetExt`] extends the standard [`ark_r1cs_std::convert::ToBitsGadget`]
-/// with more functionality.
 pub trait ToBitsGadgetExt<F: PrimeField>: Sized {
-    /// [`ToBitsGadgetExt::to_n_bits_le`] decomposes `self` into `n`
-    /// little-endian bits.
-    ///
-    /// An error is returned if `self` cannot be represented in `n` bits.
     fn to_n_bits_le(&self, n: usize) -> Result<Vec<Boolean<F>>, SynthesisError>;
 
-    /// [`ToBitsGadgetExt::enforce_bit_length`] enforces that `self` can be
-    /// represented in at most `n` bits.
-    ///
-    /// This is useful for checking that a field element is within the range of
-    /// `[0, 2^n - 1]`
     fn enforce_bit_length(&self, n: usize) -> Result<(), SynthesisError> {
         self.to_n_bits_le(n)?;
         Ok(())
@@ -62,12 +40,47 @@ impl<F: PrimeField> FromBitsGadget<F> for FpVar<F> {
 
 impl<F: PrimeField> ToBitsGadgetExt<F> for FpVar<F> {
     fn to_n_bits_le(&self, n: usize) -> Result<Vec<Boolean<F>>, SynthesisError> {
-        let mut bits = self.value().unwrap_or_default().into_bigint().to_bits_le();
-        bits.resize(n, false);
+        let bits = assignment_or_setup(
+            self.cs(),
+            || vec![false; n],
+            || {
+                let mut bits = self.value()?.into_bigint().to_bits_le();
+                bits.resize(n, false);
+                Ok(bits)
+            },
+        )?;
         let bits = Vec::new_variable_with_inferred_mode(self.cs(), || Ok(bits))?;
 
         Boolean::le_bits_to_fp(&bits)?.enforce_equal(self)?;
 
         Ok(bits)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ark_bn254::Fr;
+    use ark_r1cs_std::{alloc::AllocVar, fields::fp::FpVar};
+    use ark_relations::gr1cs::{ConstraintSystem, SynthesisMode};
+
+    use super::ToBitsGadgetExt;
+
+    #[test]
+    fn to_n_bits_le_uses_setup_placeholder() {
+        let cs = ConstraintSystem::<Fr>::new_ref();
+        cs.set_mode(SynthesisMode::Setup);
+
+        let value = FpVar::new_witness(
+            cs.clone(),
+            || -> Result<Fr, ark_relations::gr1cs::SynthesisError> {
+                Err(ark_relations::gr1cs::SynthesisError::AssignmentMissing)
+            },
+        )
+        .expect("setup mode should allow allocating an unassigned witness");
+        let bits = value
+            .to_n_bits_le(8)
+            .expect("setup mode should use an explicit placeholder");
+
+        assert_eq!(bits.len(), 8);
     }
 }

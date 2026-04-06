@@ -1,23 +1,11 @@
-//! This module defines and implements the computation of random linear
-//! combination (RLC).
-//!
-//! An RLC computes $\sum v_i \cdot c_i$ where $v_i$ are values (scalars or
-//! vectors) and $c_i$ are the randomness (challenge coefficients), which is
-//! used extensively in folding schemes.
-
 use ark_std::{
     iter::Sum,
     ops::{Add, Mul},
 };
 
-/// [`ScalarRLC`] computes the random linear combination for a sequence of
-/// scalars (i.e., each $v_i$ is a scalar).
 pub trait ScalarRLC<Coeff> {
-    /// [`ScalarRLC::Value`] is the result type of the RLC computation.
     type Value;
 
-    /// [`ScalarRLC::scalar_rlc`] evaluates the RLC with the given coefficients
-    /// `coeffs`.
     fn scalar_rlc(self, coeffs: &[Coeff]) -> Self::Value;
 }
 
@@ -32,15 +20,9 @@ where
     }
 }
 
-/// [`SliceRLC`] computes the random linear combination for a sequence of
-/// vectors (i.e., each $v_i$ is a vector), by computing the RLC element-wise.
-// TODO (@winderica): can we unify `ScalarRLC` and `SliceRLC` into one trait?
 pub trait SliceRLC<Coeff> {
-    /// [`SliceRLC::Value`] is the result type of the RLC computation.
     type Value;
 
-    /// [`SliceRLC::slice_rlc`] evaluates the RLC with the given coefficients
-    /// `coeffs`.
     fn slice_rlc(self, coeffs: &[Coeff]) -> Vec<Self::Value>;
 }
 

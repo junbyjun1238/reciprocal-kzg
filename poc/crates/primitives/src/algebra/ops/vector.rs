@@ -1,25 +1,15 @@
-//! This module provides definitions and implementations of in-circuit vector
-//! operations.
-
 use ark_relations::gr1cs::SynthesisError;
 use ark_std::ops::{Add, Mul, Sub};
 
-/// [`VectorGadget`] defines operations on in-circuit vector variables.
 pub trait VectorGadget<FV> {
-    /// [`VectorGadget::add`] computes the element-wise sum of two vectors.
     fn add(&self, other: &Self) -> Result<Vec<FV>, SynthesisError>;
 
-    /// [`VectorGadget::sub`] computes the element-wise difference of two
-    /// vectors.
     fn sub(&self, other: &Self) -> Result<Vec<FV>, SynthesisError>;
 
-    /// [`VectorGadget::scale`] multiplies every element by a scalar.
     fn scale<Scalar, Output>(&self, scalar: &Scalar) -> Result<Vec<Output>, SynthesisError>
     where
         for<'a> &'a Scalar: Mul<&'a FV, Output = Output>;
 
-    /// [`VectorGadget::hadamard`] computes the element-wise (Hadamard) product
-    /// of two vectors.
     fn hadamard(&self, other: &Self) -> Result<Vec<FV>, SynthesisError>;
 }
 

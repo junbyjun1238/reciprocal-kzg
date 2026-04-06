@@ -1,25 +1,24 @@
 # benchmark
 
-This folder contains the canonical benchmark artifacts for the current
-reciprocal PoC.
+This folder contains the canonical benchmark artifacts for the public PoC.
 
-The current snapshot measures the checked-in PoC implementation against:
+The integration-level snapshot compares:
 
-- the stock Sonobe test circuit
+- the reference Sonobe test circuit
 - a naive reciprocal baseline that carries descriptor metadata in state
-- the specialized reciprocal path
+- the specialized reciprocal variant
 
 ## Current Contents
 
-- `reciprocal_snapshot.csv`: canonical checked-in snapshot for the current PoC
-- `reciprocal_kernel_snapshot.csv`: canonical checked-in arithmetic kernel snapshot
+- `reciprocal_snapshot.csv`: canonical integration-level snapshot for the current PoC
+- `reciprocal_kernel_snapshot.csv`: canonical arithmetic-kernel snapshot
 - `run_snapshot.ps1`: helper script to rerun the snapshot from `../poc`
 - `run_kernel_snapshot.ps1`: helper script to rerun the kernel benchmark from `../poc`
-- `verify_repro.ps1`: reruns both benchmark tracks and checks that the structural metrics still match the checked-in CSVs
+- `verify_repro.ps1`: reruns both benchmark tracks and checks that the structural metrics still match the canonical CSVs
 
 ## Benchmark Source
 
-The benchmark logic lives in the PoC codebase:
+The benchmark code lives in the PoC workspace:
 
 - `../poc/crates/ivc/examples/reciprocal_poc.rs`
 - `../poc/crates/ivc/src/compilers/cyclefold/adapters/nova.rs`
@@ -27,12 +26,12 @@ The benchmark logic lives in the PoC codebase:
 
 ## Artifact Roles
 
-- `reciprocal_snapshot.csv` captures the Sonobe-integrated PoC path.
-- `reciprocal_kernel_snapshot.csv` captures the paper-level arithmetic story for the reciprocal kernel itself.
+- `reciprocal_snapshot.csv` captures the Sonobe-integrated benchmark for the current PoC.
+- `reciprocal_kernel_snapshot.csv` captures the arithmetic scaling benchmark for the reciprocal kernel itself.
 
 ## Reproducibility Note
 
-The checked-in CSVs are canonical for structural metrics such as state width,
+The CSVs are treated as canonical for structural metrics such as state width,
 witness counts, constraint counts, descriptor sizes, and multiplication counts.
 Local timing columns are expected to vary across machines and runs, so
 `verify_repro.ps1` compares only the structural columns when checking whether a

@@ -1,6 +1,3 @@
-//! This module implements the Rank-1 Constraint System (R1CS) and its relation
-//! checks against plain and relaxed witnesses and instances.
-
 use ark_ff::Field;
 use ark_relations::gr1cs::{ConstraintSystem, Matrix, R1CS_PREDICATE_LABEL};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -16,16 +13,14 @@ use crate::{
 
 pub mod circuits;
 
-/// [`R1CSConfig`] stores the shape parameters of an R1CS structure.
 #[derive(Debug, Clone, Default, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct R1CSConfig {
-    m: usize, // number of constraints
-    n: usize, // number of variables
-    l: usize, // io len
+    m: usize,
+    n: usize,
+    l: usize,
 }
 
 impl R1CSConfig {
-    /// [`R1CSConfig::new`] creates a new R1CS configuration.
     pub fn new(n_constraints: usize, n_variables: usize, n_public_inputs: usize) -> Self {
         Self {
             m: n_constraints,
@@ -67,7 +62,7 @@ impl<F: Field> From<&ConstraintSystem<F>> for R1CSConfig {
         Self::new(
             cs.num_constraints(),
             cs.num_instance_variables + cs.num_witness_variables,
-            cs.num_instance_variables - 1, // -1 to subtract the first '1'
+            cs.num_instance_variables - 1,
         )
     }
 }
@@ -94,8 +89,6 @@ impl CCSVariant for R1CSConfig {
     }
 }
 
-/// [`R1CS`] holds the three sparse matrices `A`, `B`, `C` together with the
-/// configuration.
 #[allow(non_snake_case)]
 #[derive(Debug, Clone, Default, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct R1CS<F: Field> {
@@ -108,8 +101,6 @@ pub struct R1CS<F: Field> {
 type Row<F> = Vec<(F, usize)>;
 
 impl<F: Field> R1CS<F> {
-    /// [`R1CS::evaluate_rows`] evaluates the R1CS relation by applying the
-    /// provided function `f` to each triplet of rows `(A[i], B[i], C[i])`.
     pub fn evaluate_rows(
         &self,
         f: impl Fn(((&Row<F>, &Row<F>), &Row<F>)) -> Result<F, Error> + Send + Sync,
@@ -117,8 +108,6 @@ impl<F: Field> R1CS<F> {
         cfg_iter!(self.A).zip(&self.B).zip(&self.C).map(f).collect()
     }
 
-    /// [`R1CS::evaluate_at`] evaluates the R1CS relation at a given vector of
-    /// assignments `z`.
     pub fn evaluate_at(&self, z: Assignments<F, impl AsRef<[F]> + Sync>) -> Result<Vec<F>, Error> {
         let cfg = &self.cfg;
 
@@ -143,8 +132,6 @@ impl<F: Field> R1CS<F> {
             let az = a.iter().map(|(val, col)| z[*col] * val).sum::<F>();
             let bz = b.iter().map(|(val, col)| z[*col] * val).sum::<F>();
             let cz = c.iter().map(|(val, col)| z[*col] * val).sum::<F>();
-            // use `z[0]` here since the constant term at index 0 may not be 1
-            // for relaxed instances
             Ok(az * bz - z[0] * cz)
         })
     }
@@ -165,8 +152,6 @@ impl<F: Field> Arith for R1CS<F> {
 }
 
 impl<F: Field> R1CS<F> {
-    /// [`R1CS::new`] creates a new R1CS structure from the given configuration
-    /// and matrices.
     #[allow(non_snake_case)]
     pub fn new(cfg: R1CSConfig, [A, B, C]: [Matrix<F>; 3]) -> Self {
         Self { cfg, A, B, C }
@@ -192,7 +177,6 @@ impl<F: Field> TryFrom<CCS<F, R1CSConfig>> for R1CS<F> {
 
 impl<F: Field> From<&ConstraintSystem<F>> for R1CS<F> {
     fn from(cs: &ConstraintSystem<F>) -> Self {
-        // Get the R1CS predicate matrices
         let r1cs_predicate = &cs.predicate_constraint_systems[R1CS_PREDICATE_LABEL];
         let matrices = r1cs_predicate.to_matrices(cs);
         // `unwrap` is safe here because R1CS always has 3 matrices
@@ -223,23 +207,13 @@ impl<F: Field, W: AsRef<[F]>, U: AsRef<[F]>> ArithRelation<W, U> for R1CS<F> {
     }
 }
 
-/// [`RelaxedWitness`] defines a relaxed version of R1CS witness.
-///
-/// It is the basis of witnesses in many folding schemes that support R1CS.
 pub struct RelaxedWitness<V> {
-    /// [`RelaxedWitness::w`] is the witness vector
     pub w: V,
-    /// [`RelaxedWitness::e`] is the error term
     pub e: V,
 }
 
-/// [`RelaxedInstance`] defines a relaxed version of R1CS instance.
-///
-/// It is the basis of instances in many folding schemes that support R1CS.
 pub struct RelaxedInstance<V: IntoIterator> {
-    /// [`RelaxedInstance::x`] is the public input vector
     pub x: V,
-    /// [`RelaxedInstance::u`] is the constant term
     pub u: V::Item,
 }
 

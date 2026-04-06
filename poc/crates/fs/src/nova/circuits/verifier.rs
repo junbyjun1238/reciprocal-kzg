@@ -1,5 +1,3 @@
-//! Partial and full in-circuit verifier implementations for Nova.
-
 use ark_r1cs_std::{GR1CSVar, alloc::AllocVar, groups::CurveVar};
 use ark_relations::gr1cs::SynthesisError;
 use sonobe_primitives::{

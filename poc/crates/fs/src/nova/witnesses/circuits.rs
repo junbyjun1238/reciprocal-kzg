@@ -1,5 +1,3 @@
-//! In-circuit variables for Nova witnesses.
-
 use ark_r1cs_std::{
     GR1CSVar,
     alloc::{AllocVar, AllocationMode},
@@ -10,17 +8,11 @@ use sonobe_primitives::commitments::CommitmentDefGadget;
 
 use super::{IncomingWitness, RunningWitness};
 
-/// [`RunningWitnessVar`] defines Nova's running witness variable.
 #[derive(Debug, PartialEq)]
 pub struct RunningWitnessVar<CM: CommitmentDefGadget> {
-    /// [`RunningWitnessVar::e`] is the error term.
     pub e: Vec<CM::ScalarVar>,
-    /// [`RunningWitnessVar::r_e`] is the randomness for the error term
-    /// commitment.
     pub r_e: CM::RandomnessVar,
-    /// [`RunningWitnessVar::w`] is the vector of witnesses (to the circuit).
     pub w: Vec<CM::ScalarVar>,
-    /// [`RunningWitnessVar::r_w`] is the randomness for the witness commitment.
     pub r_w: CM::RandomnessVar,
 }
 
@@ -65,13 +57,9 @@ impl<CM: CommitmentDefGadget> GR1CSVar<CM::ConstraintField> for RunningWitnessVa
     }
 }
 
-/// [`IncomingWitnessVar`] defines Nova's incoming witness variable.
 #[derive(Debug, PartialEq)]
 pub struct IncomingWitnessVar<CM: CommitmentDefGadget> {
-    /// [`IncomingWitnessVar::w`] is the vector of witnesses (to the circuit).
     pub w: Vec<CM::ScalarVar>,
-    /// [`IncomingWitnessVar::r_w`] is the randomness for the witness
-    /// commitment.
     pub r_w: CM::RandomnessVar,
 }
 

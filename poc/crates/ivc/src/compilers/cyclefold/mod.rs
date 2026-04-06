@@ -1,12 +1,3 @@
-//! Implementation of the CycleFold-based IVC compiler as described in this
-//! [paper].
-//!
-//! It turns any compatible folding scheme into a full IVC scheme by running the
-//! primary circuit on one curve and a "CycleFold" circuit on the secondary
-//! curve to handle emulated elliptic curve operations.
-//!
-//! [paper]: https://eprint.iacr.org/2023/1192.pdf
-
 use ark_ff::field_hashers::hash_to_field;
 use ark_relations::gr1cs::{ConstraintSystem, SynthesisError};
 use ark_serialize::CanonicalSerialize;
@@ -43,21 +34,13 @@ use crate::{
 pub mod adapters;
 pub mod circuits;
 
-/// [`FoldingSchemeCycleFoldExt`] is the extension trait that a folding scheme
-/// must implement to be used with the CycleFold compiler.
 pub trait FoldingSchemeCycleFoldExt<const M: usize, const N: usize>:
     GroupBasedFoldingSchemePrimary<M, N>
 {
-    /// [`FoldingSchemeCycleFoldExt::CFCircuit`] is the CycleFold circuit type
-    /// associated with the folding scheme.
     type CFCircuit: CycleFoldCircuit<CF2<<Self::CM as CommitmentDef>::Commitment>>;
 
-    /// [`FoldingSchemeCycleFoldExt::N_CYCLEFOLDS`] specifies how many CycleFold
-    /// operations are needed to verify the primary folding scheme's proof.
     const N_CYCLEFOLDS: usize;
 
-    /// [`FoldingSchemeCycleFoldExt::to_cyclefold_circuits`] creates CycleFold
-    /// circuits for verifying the point RLCs needed by the folding scheme.
     #[allow(non_snake_case)]
     fn to_cyclefold_circuits(
         Us: &[impl Borrow<Self::RU>; M],
@@ -66,10 +49,6 @@ pub trait FoldingSchemeCycleFoldExt<const M: usize, const N: usize>:
         rho: Self::Challenge,
     ) -> Vec<Self::CFCircuit>;
 
-    /// [`FoldingSchemeCycleFoldExt::to_cyclefold_inputs`] computes the inputs
-    /// to CycleFold circuits.
-    ///
-    /// This will be called by the augmented circuit on the primary curve.
     #[allow(non_snake_case, clippy::type_complexity)]
     fn to_cyclefold_inputs(
         Us: [<Self::Gadget as FoldingSchemeDefGadget>::RU; M],
@@ -90,14 +69,12 @@ pub trait FoldingSchemeCycleFoldExt<const M: usize, const N: usize>:
     >;
 }
 
-/// [`Key`] is the prover / verifier key for the CycleFold-based IVC scheme.
 pub struct Key<FS1: FoldingSchemeDef, FS2: FoldingSchemeDef, T>(
     pub FS1::DeciderKey,
     pub FS2::DeciderKey,
     pub T,
 );
 
-/// [`Proof`] is the proof produced by the CycleFold compiler.
 pub struct Proof<FS1: FoldingSchemeDef, FS2: FoldingSchemeDef>(
     pub FS1::RW,
     pub FS1::RU,
@@ -122,16 +99,6 @@ impl<FS1: FoldingSchemeDef, FS2: FoldingSchemeDef, T> Dummy<&Key<FS1, FS2, T>> f
     }
 }
 
-/// [`CycleFoldBasedIVC`] is the main implementation of the IVC compiler based
-/// on CycleFold.
-///
-/// We consider two folding schemes `FS1` and `FS2`, where `FS1` is the folding
-/// scheme on the primary curve and `FS2` is the folding scheme on the secondary
-/// curve.
-/// The user's step circuit is proven using `FS1`, and part of the verification
-/// of `FS1`'s proof is offloaded to `FS2` using CycleFold.
-///
-/// `T` is the transcript type used by the IVC prover and verifier.
 pub struct CycleFoldBasedIVC<FS1, FS2, T> {
     _d: PhantomData<(FS1, FS2, T)>,
 }
@@ -142,10 +109,6 @@ where
             1,
             1,
             Arith: From<ConstraintSystem<CF1<<FS1::CM as CommitmentDef>::Commitment>>>,
-            // TODO (@winderica):
-            // All folding schemes we currently support have an empty verifier
-            // key, so I used `()` here, but this should be generalized in the
-            // future.
             Gadget: FoldingSchemePartialVerifierGadget<1, 1, VerifierKey = ()>,
             CM: CommitmentDef<
                 Commitment: SonobeCurve<BaseField = <FS2::CM as CommitmentDef>::Scalar>,
@@ -189,22 +152,12 @@ where
         (pp1, pp2, hash_config): Self::PublicParam,
         step_circuit: &FC,
     ) -> Result<(Self::ProverKey<FC>, Self::VerifierKey<FC>), Error> {
-        // Run the CycleFold circuit to extract the arithmetization on the
-        // secondary curve.
         let arith2 = {
             let cs = ArithExtractor::new();
             cs.execute_fn(|cs| FS1::CFCircuit::default().verify_point_rlc(cs))?;
             cs.arith::<FS2::Arith>()?
         };
 
-        // The augmented circuit depends on the configuration of itself.
-        // For instance, we are not aware of the number of constraints in the
-        // augmented circuit until we fix `arith1_config`, which requires us to
-        // provide the number of constraints in the augmented circuit.
-        //
-        // To break this circular dependency, we use a fixed-point iteration
-        // where we start from a default arithmetization and repeatedly update
-        // it until its configuration stabilizes.
         let mut arith1 = FS1::Arith::default();
 
         loop {

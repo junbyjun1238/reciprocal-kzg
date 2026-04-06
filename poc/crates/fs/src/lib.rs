@@ -1,30 +1,5 @@
 #![warn(missing_docs)]
 
-//! Folding scheme definition and implementations.
-//!
-//! This crate provides the traits for folding schemes, the out-of-circuit
-//! widgets and the in-circuit gadgets of their algorithms, and their associated
-//! structures (such as keys, instances, and witnesses) in [`definitions`].
-//!
-//! Concrete constructions of the following folding schemes are then implemented
-//! as submodules:
-//! - [`Nova`](nova)
-//! - [`HyperNova`](hypernova)
-//! - [`Mova`](mova)
-//! - [`Ova`](ova)
-//! - [`ProtoGalaxy`](protogalaxy)
-//!
-//! Each scheme module mirrors the same directory layout:
-//! - `algorithms/`: Implementations for the following algorithms:
-//!     - Preprocessing/Setup: [`FoldingSchemePreprocessor`]
-//!     - Key generation: [`FoldingSchemeKeyGenerator`]
-//!     - Proof generation: [`FoldingSchemeProver`]
-//!     - Proof verification: [`FoldingSchemeVerifier`]
-//! - `circuits/`: In-circuit (partial / full) gadgets, mainly for verification.
-//! - `instances/`: Instance types.
-//! - `keys/`: Key types.
-//! - `witnesses/`: Witness types.
-
 pub mod definitions;
 pub mod nova;
 

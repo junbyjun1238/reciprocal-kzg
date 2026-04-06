@@ -1,8 +1,3 @@
-//! This module implements the Nova folding scheme, which is introduced in this
-//! [paper].
-//!
-//! [paper]: https://eprint.iacr.org/2021/370.pdf
-
 use ark_r1cs_std::boolean::Boolean;
 use ark_std::marker::PhantomData;
 use sonobe_primitives::{
@@ -29,22 +24,13 @@ pub mod instances;
 pub mod keys;
 pub mod witnesses;
 
-// used for the RO challenges.
-// From [Srinath Setty](https://microsoft.com/en-us/research/people/srinath/): In Nova, soundness
-// error ≤ 2/|S|, where S is the subset of the field F from which the challenges are drawn. In this
-// case, we keep the size of S close to 2^128.
-/// [`AbstractNova`] implements the Nova folding scheme which can operate on
-/// both the primary and secondary curves.
 pub struct AbstractNova<CM, TF, const CHALLENGE_BITS: usize = 128> {
     _t: PhantomData<(CM, TF)>,
 }
 
-/// [`Nova`] is the main Nova folding scheme on the primary curve.
 pub type Nova<CM, const CHALLENGE_BITS: usize = 128> =
     AbstractNova<CM, <CM as CommitmentDef>::Scalar, CHALLENGE_BITS>;
 
-/// [`CycleFoldNova`] is the Nova folding scheme on the secondary curve which
-/// can be used as the folding scheme for folding CycleFold instances.
 pub type CycleFoldNova<CM, const CHALLENGE_BITS: usize = 128> =
     AbstractNova<CM, CF2<<CM as CommitmentDef>::Commitment>, CHALLENGE_BITS>;
 
@@ -67,7 +53,6 @@ impl<CM: GroupBasedCommitment, TF: SonobeField, const CHALLENGE_BITS: usize> Fol
     type Proof<const M: usize, const N: usize> = CM::Commitment;
 }
 
-/// [`AbstractNovaGadget`] is the in-circuit gadget for [`AbstractNova`].
 pub struct AbstractNovaGadget<CM, const CHALLENGE_BITS: usize = 128> {
     _vc: PhantomData<CM>,
 }

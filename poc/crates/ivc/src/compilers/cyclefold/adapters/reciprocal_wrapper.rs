@@ -1,89 +1,50 @@
-//! Reciprocal wrapper helpers that treat 4 coordinate claims as a single
-//! verifier-visible object.
-
 use thiserror::Error;
 
 use super::reciprocal_types::{
-    RECIPROCAL_N4_TRACE_LEN, ReciprocalPublicInstance, ReciprocalSameQLane,
-    ReciprocalTypeError, ReciprocalWitness, reciprocal_n4_trace_and_output,
+    RECIPROCAL_N4_TRACE_LEN, ReciprocalPublicInstance, ReciprocalSameQLane, ReciprocalTypeError,
+    ReciprocalWitness, reciprocal_n4_trace_and_output,
 };
-use sonobe_primitives::commitments::{CommitmentDef, CommitmentOps};
 use ark_ff::PrimeField;
+use sonobe_primitives::commitments::{CommitmentDef, CommitmentOps};
 
-/// [`ReciprocalCoordinateClaim`] is a scalarized coordinate-level claim derived
-/// from a reciprocal public instance.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReciprocalCoordinateClaim<CM: CommitmentDef> {
-    /// Commitment to the input vector `x`.
     pub cm_x: CM::Commitment,
-    /// Public descriptor.
     pub q: Vec<CM::Scalar>,
-    /// Coordinate index in `{0,1,2,3}`.
     pub coordinate: usize,
-    /// Claimed coordinate value.
     pub value: CM::Scalar,
 }
 
-/// [`ReciprocalAggregatedProof`] is the PoC-level proof object exported by the
-/// wrapper layer.
-///
-/// The verifier-visible projection is the 4-coordinate claim bundle. When the
-/// PoC runs with a real opening path, the proof also carries an opening witness
-/// `(x, trace, omega)` that can be checked offchain against `(C, q, y)`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReciprocalAggregatedProof<CM: CommitmentDef> {
-    /// The four coordinate claims that were wrapped into one object.
     pub coordinates: [ReciprocalCoordinateClaim<CM>; 4],
-    /// Optional opening witness used by the current offchain PoC verifier.
     pub opening_witness: Option<ReciprocalWitness<CM>>,
 }
 
-/// [`ReciprocalWrapperError`] enumerates wrapper-level failures detected before
-/// the actual cryptographic opening layer is plugged in.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum ReciprocalWrapperError {
-    /// The wrapper received malformed reciprocal helper data.
     #[error(transparent)]
     Type(#[from] ReciprocalTypeError),
-    /// The coordinate claim does not use the expected commitment.
     #[error("commitment mismatch between the aggregated proof and the public instance")]
     CommitmentMismatch,
-    /// The coordinate claim does not use the expected descriptor.
     #[error("descriptor mismatch between the aggregated proof and the public instance")]
     DescriptorMismatch,
-    /// The coordinate position is not the expected one.
     #[error("coordinate mismatch: expected coordinate {expected}, got {actual}")]
-    CoordinateMismatch {
-        /// The expected coordinate position.
-        expected: usize,
-        /// The received coordinate position.
-        actual: usize,
-    },
-    /// The coordinate value is not the expected one from the public output.
+    CoordinateMismatch { expected: usize, actual: usize },
     #[error("output mismatch at coordinate {coordinate}")]
-    OutputMismatch {
-        /// The coordinate where the mismatch occurred.
-        coordinate: usize,
-    },
-    /// The proof does not contain the opening witness required by the current
-    /// offchain opening verifier.
+    OutputMismatch { coordinate: usize },
     #[error("missing opening witness in reciprocal aggregated proof")]
     MissingOpeningWitness,
-    /// The opening witness does not verify against the commitment.
     #[error("commitment opening failed for the reciprocal proof witness")]
     OpeningMismatch,
-    /// The reciprocal trace inside the proof witness is malformed.
     #[error("reciprocal trace mismatch in opening witness")]
     TraceMismatch,
 }
 
-/// [`ReciprocalWrapper`] provides helpers for splitting and re-aggregating a
-/// reciprocal public instance.
 #[derive(Clone, Debug, Default)]
 pub struct ReciprocalWrapper;
 
 impl ReciprocalWrapper {
-    /// Decomposes the public instance into four coordinate-level claims.
     pub fn decompose<CM: CommitmentDef>(
         instance: &ReciprocalPublicInstance<CM>,
     ) -> [ReciprocalCoordinateClaim<CM>; 4] {
@@ -95,8 +56,6 @@ impl ReciprocalWrapper {
         })
     }
 
-    /// Aggregates four coordinate claims into one verifier-visible object after
-    /// checking that they match the target public instance exactly.
     pub fn aggregate<CM: CommitmentDef>(
         instance: &ReciprocalPublicInstance<CM>,
         coordinates: [ReciprocalCoordinateClaim<CM>; 4],
@@ -108,8 +67,15 @@ impl ReciprocalWrapper {
         })
     }
 
-    /// Verifies the wrapper-level consistency of a single aggregated proof
-    /// object against the public instance.
+    pub fn aggregate_in_lane<CM: CommitmentDef>(
+        lane: &ReciprocalSameQLane<CM>,
+        instance: &ReciprocalPublicInstance<CM>,
+        coordinates: [ReciprocalCoordinateClaim<CM>; 4],
+    ) -> Result<ReciprocalAggregatedProof<CM>, ReciprocalWrapperError> {
+        Self::ensure_lane_accepts(lane, instance)?;
+        Self::aggregate(instance, coordinates)
+    }
+
     pub fn verify<CM: CommitmentDef>(
         instance: &ReciprocalPublicInstance<CM>,
         proof: &ReciprocalAggregatedProof<CM>,
@@ -117,20 +83,15 @@ impl ReciprocalWrapper {
         Self::check_coordinate_claims(instance, &proof.coordinates)
     }
 
-    /// Verifies wrapper-level consistency under a fixed same-`q` lane.
     pub fn verify_in_lane<CM: CommitmentDef>(
         lane: &ReciprocalSameQLane<CM>,
         instance: &ReciprocalPublicInstance<CM>,
         proof: &ReciprocalAggregatedProof<CM>,
     ) -> Result<(), ReciprocalWrapperError> {
-        if !lane.accepts(instance) {
-            return Err(ReciprocalWrapperError::DescriptorMismatch);
-        }
+        Self::ensure_lane_accepts(lane, instance)?;
         Self::verify(instance, proof)
     }
 
-    /// Builds a proof object that carries a real opening witness for the
-    /// worked reciprocal `N=4` evaluator.
     pub fn prove_opening<CM: CommitmentOps>(
         ck: &CM::Key,
         instance: &ReciprocalPublicInstance<CM>,
@@ -141,8 +102,7 @@ impl ReciprocalWrapper {
     {
         CM::open(ck, &witness.x, &witness.omega, &instance.cm_x)
             .map_err(|_| ReciprocalWrapperError::OpeningMismatch)?;
-        let (expected_trace, expected_y) =
-            reciprocal_n4_trace_and_output(&instance.q, &witness.x)?;
+        let (expected_trace, expected_y) = reciprocal_n4_trace_and_output(&instance.q, &witness.x)?;
         if witness.trace.len() != RECIPROCAL_N4_TRACE_LEN || witness.trace != expected_trace {
             return Err(ReciprocalWrapperError::TraceMismatch);
         }
@@ -153,7 +113,6 @@ impl ReciprocalWrapper {
         })
     }
 
-    /// Verifies the opening witness carried by a reciprocal aggregated proof.
     pub fn verify_opening<CM: CommitmentOps>(
         ck: &CM::Key,
         instance: &ReciprocalPublicInstance<CM>,
@@ -169,16 +128,13 @@ impl ReciprocalWrapper {
             .ok_or(ReciprocalWrapperError::MissingOpeningWitness)?;
         CM::open(ck, &witness.x, &witness.omega, &instance.cm_x)
             .map_err(|_| ReciprocalWrapperError::OpeningMismatch)?;
-        let (expected_trace, expected_y) =
-            reciprocal_n4_trace_and_output(&instance.q, &witness.x)?;
+        let (expected_trace, expected_y) = reciprocal_n4_trace_and_output(&instance.q, &witness.x)?;
         if witness.trace.len() != RECIPROCAL_N4_TRACE_LEN || witness.trace != expected_trace {
             return Err(ReciprocalWrapperError::TraceMismatch);
         }
         Self::check_output(instance, &expected_y)
     }
 
-    /// Same as [`ReciprocalWrapper::prove_opening`], but requires the statement
-    /// to stay inside a fixed same-`q` lane.
     pub fn prove_opening_in_lane<CM: CommitmentOps>(
         ck: &CM::Key,
         lane: &ReciprocalSameQLane<CM>,
@@ -188,14 +144,10 @@ impl ReciprocalWrapper {
     where
         CM::Scalar: PrimeField,
     {
-        if !lane.accepts(instance) {
-            return Err(ReciprocalWrapperError::DescriptorMismatch);
-        }
+        Self::ensure_lane_accepts(lane, instance)?;
         Self::prove_opening(ck, instance, witness)
     }
 
-    /// Same as [`ReciprocalWrapper::verify_opening`], but also checks the
-    /// same-`q` lane policy.
     pub fn verify_opening_in_lane<CM: CommitmentOps>(
         ck: &CM::Key,
         lane: &ReciprocalSameQLane<CM>,
@@ -205,10 +157,21 @@ impl ReciprocalWrapper {
     where
         CM::Scalar: PrimeField,
     {
-        if !lane.accepts(instance) {
-            return Err(ReciprocalWrapperError::DescriptorMismatch);
-        }
+        Self::ensure_lane_accepts(lane, instance)?;
         Self::verify_opening(ck, instance, proof)
+    }
+
+    fn ensure_lane_accepts<CM: CommitmentDef>(
+        lane: &ReciprocalSameQLane<CM>,
+        instance: &ReciprocalPublicInstance<CM>,
+    ) -> Result<(), ReciprocalWrapperError> {
+        match lane.check_instance(instance) {
+            Ok(()) => Ok(()),
+            Err(ReciprocalTypeError::DescriptorMismatch) => {
+                Err(ReciprocalWrapperError::DescriptorMismatch)
+            }
+            Err(err) => Err(err.into()),
+        }
     }
 
     fn check_coordinate_claims<CM: CommitmentDef>(
@@ -250,8 +213,8 @@ impl ReciprocalWrapper {
 
 #[cfg(test)]
 mod tests {
-    use ark_ec::PrimeGroup;
     use ark_bn254::G1Projective;
+    use ark_ec::PrimeGroup;
     use ark_std::rand::thread_rng;
     use sonobe_primitives::commitments::{CommitmentOps, pedersen::Pedersen};
 
@@ -274,11 +237,12 @@ mod tests {
         let mut rng = thread_rng();
         let q = vec![1_u64.into(), 2_u64.into(), 3_u64.into(), 4_u64.into()];
         let x = vec![5_u64.into(), 6_u64.into(), 7_u64.into(), 8_u64.into()];
-        let ck = TestCM::generate_key(x.len(), &mut rng).expect("commitment key generation should work");
+        let ck =
+            TestCM::generate_key(x.len(), &mut rng).expect("commitment key generation should work");
         let (cm_x, omega) =
             TestCM::commit(&ck, &x, &mut rng).expect("commitment generation should work");
-        let (trace, y) =
-            reciprocal_n4_trace_and_output(&q, &x).expect("worked reciprocal evaluator should work");
+        let (trace, y) = reciprocal_n4_trace_and_output(&q, &x)
+            .expect("worked reciprocal evaluator should work");
         let instance = ReciprocalPublicInstance { cm_x, q, y };
         let witness = ReciprocalWitness { x, trace, omega };
         (ck, instance, witness)
@@ -287,8 +251,9 @@ mod tests {
     #[test]
     fn test_reciprocal_wrapper_accepts_consistent_proof() {
         let (_, instance, _) = sample_bundle();
-        let proof = ReciprocalWrapper::aggregate(&instance, ReciprocalWrapper::decompose(&instance))
-            .expect("wrapper should accept self-consistent coordinates");
+        let proof =
+            ReciprocalWrapper::aggregate(&instance, ReciprocalWrapper::decompose(&instance))
+                .expect("wrapper should accept self-consistent coordinates");
 
         assert_eq!(proof.coordinates.len(), 4);
         assert!(proof.opening_witness.is_none());
@@ -334,13 +299,17 @@ mod tests {
     #[test]
     fn test_reciprocal_wrapper_verify_in_lane() {
         let (_, instance, _) = sample_bundle();
-        let lane = ReciprocalSameQLane::<TestCM>::new(instance.q.clone());
+        let lane = ReciprocalSameQLane::<TestCM>::new(instance.q.clone())
+            .expect("worked instance should define a valid same-q lane");
         let proof = ReciprocalAggregatedProof {
             coordinates: ReciprocalWrapper::decompose(&instance),
             opening_witness: None,
         };
 
-        assert_eq!(ReciprocalWrapper::verify_in_lane(&lane, &instance, &proof), Ok(()));
+        assert_eq!(
+            ReciprocalWrapper::verify_in_lane(&lane, &instance, &proof),
+            Ok(())
+        );
     }
 
     #[test]
@@ -368,7 +337,10 @@ mod tests {
             .expect("opening proof construction should work");
 
         assert!(proof.opening_witness.is_some());
-        assert_eq!(ReciprocalWrapper::verify_opening(&ck, &instance, &proof), Ok(()));
+        assert_eq!(
+            ReciprocalWrapper::verify_opening(&ck, &instance, &proof),
+            Ok(())
+        );
     }
 
     #[test]
@@ -380,7 +352,8 @@ mod tests {
             .opening_witness
             .as_mut()
             .expect("opening witness should be present");
-        opening.trace[0] += <TestCM as sonobe_primitives::commitments::CommitmentDef>::Scalar::from(1_u64);
+        opening.trace[0] +=
+            <TestCM as sonobe_primitives::commitments::CommitmentDef>::Scalar::from(1_u64);
 
         assert_eq!(
             ReciprocalWrapper::verify_opening(&ck, &instance, &proof),
@@ -391,8 +364,9 @@ mod tests {
     #[test]
     fn test_reciprocal_wrapper_verify_opening_rejects_missing_witness() {
         let (_, instance, _) = sample_bundle();
-        let proof = ReciprocalWrapper::aggregate(&instance, ReciprocalWrapper::decompose(&instance))
-            .expect("projection-only aggregation should still work");
+        let proof =
+            ReciprocalWrapper::aggregate(&instance, ReciprocalWrapper::decompose(&instance))
+                .expect("projection-only aggregation should still work");
         let mut rng = thread_rng();
         let ck = TestCM::generate_key(4, &mut rng).expect("commitment key generation should work");
 

@@ -1,15 +1,17 @@
 # reciprocal-kzg PoC workspace
 
-This directory contains the Sonobe-derived Rust workspace used for the current
-reciprocal PoC.
+This directory contains the Sonobe-derived Rust workspace used by this
+repository. Project framing lives in the root README and
+`../docs/reciprocal_poc.md`; this file focuses only on the code layout inside
+`poc/`.
 
 ## What Lives Here
 
 - `crates/primitives`: reciprocal test circuits, seed-descriptor helpers, commitment code, and the kernel benchmark example
 - `crates/ivc`: reciprocal adapter, wrapper, offchain decider, integration tests, and the main PoC example runner
-- `crates/fs`: inherited workspace components still used by the current integration path
+- `crates/fs`: inherited workspace components still used by the current integration flow
 
-## Reciprocal-Specific Entry Points
+## Primary Entry Points
 
 - `crates/primitives/src/circuits/reciprocal_test.rs`
 - `crates/primitives/examples/reciprocal_kernel_bench.rs`
@@ -29,7 +31,7 @@ cargo run -p sonobe-primitives --example reciprocal_kernel_bench --release
 cargo run -p sonobe-ivc --example reciprocal_poc
 ```
 
-## Documentation
+## External Reading
 
 - `../docs/reciprocal_poc.md`
 - `../docs/m4_milestones.md`
@@ -37,7 +39,7 @@ cargo run -p sonobe-ivc --example reciprocal_poc
 - `../benchmark/reciprocal_snapshot.csv`
 - `../benchmark/reciprocal_kernel_snapshot.csv`
 
-## Upstream Provenance
+## Provenance
 
 See `UPSTREAM.md` for the workspace origin and the reciprocal-specific scope of
 this repo.

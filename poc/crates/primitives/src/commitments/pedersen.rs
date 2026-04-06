@@ -1,10 +1,3 @@
-//! Implementation of the Pedersen commitment scheme, including out-of-circuit
-//! widgets and in-circuit gadgets.
-//!
-//! The Pedersen commitment to a vector `v` is computed as `<g, v> + h · r`,
-//! where `g` and `h` are generators, `r` is a random scalar, and `<g, v>` is
-//! the multi-scalar multiplication of `g` and `v`.
-
 use ark_r1cs_std::{
     boolean::Boolean, convert::ToBitsGadget, eq::EqGadget, fields::fp::FpVar, groups::CurveVar,
 };
@@ -20,8 +13,6 @@ use crate::{
     utils::null::Null,
 };
 
-/// [`PedersenKey`] stores the public parameters for the Pedersen commitment
-/// scheme, where `H` controls whether the scheme is hiding or not.
 #[derive(Clone, CanonicalSerialize, CanonicalDeserialize)]
 pub struct PedersenKey<C: SonobeCurve, const H: bool> {
     g: Vec<C::Affine>,
@@ -51,7 +42,6 @@ impl<C: SonobeCurve> PedersenKey<C, true> {
         if self.g.len() < v.len() {
             return Err(Error::MessageTooLong(self.g.len(), v.len()));
         }
-        // <g, v> + h * r
         // use msm_unchecked because we already ensured at the if that generators are long enough
         Ok(C::msm_unchecked(&self.g, v) + self.h.mul(r))
     }
@@ -62,14 +52,11 @@ impl<C: SonobeCurve> PedersenKey<C, false> {
         if self.g.len() < v.len() {
             return Err(Error::MessageTooLong(self.g.len(), v.len()));
         }
-        // <g, v>
         // use msm_unchecked because we already ensured at the if that generators are long enough
         Ok(C::msm_unchecked(&self.g, v))
     }
 }
 
-/// [`Pedersen`] defines the out-of-circuit Pedersen widget, where `H` controls
-/// whether the scheme is hiding or not.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pedersen<C: SonobeCurve, const H: bool> {
     _c: PhantomData<C>,
@@ -144,18 +131,12 @@ impl<C: SonobeCurve> CommitmentOps for Pedersen<C, true> {
     }
 }
 
-/// [`PedersenGadget`] defines the in-circuit Pedersen gadget that operates over
-/// the base field of the curve and supports canonical elliptic curve point
-/// variables as commitments, where `H` controls whether the scheme is hiding or
-/// not.
 #[derive(Clone)]
 pub struct PedersenGadget<C: SonobeCurve, const H: bool> {
     _c: PhantomData<C>,
 }
 
 impl<C: SonobeCurve, const H: bool> PedersenGadget<C, H> {
-    /// [`PedersenGadget::msm`] performs multi-scalar multiplication in-circuit
-    /// with the given generators `g` and scalar bits `v`.
     fn msm(g: &[C::Var], v: &[Vec<Boolean<CF2<C>>>]) -> Result<C::Var, SynthesisError> {
         let mut res = C::Var::zero();
         let n = v.len();
@@ -214,10 +195,6 @@ impl<C: SonobeCurve> CommitmentOpsGadget for PedersenGadget<C, true> {
     }
 }
 
-/// [`PedersenEmulatedGadget`] defines the in-circuit Pedersen gadget that
-/// operates over the scalar field of the curve and supports emulated elliptic
-/// curve point variables as commitments, where `H` controls whether the scheme
-/// is hiding or not.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PedersenEmulatedGadget<C: SonobeCurve, const H: bool> {
     _c: PhantomData<C>,
@@ -305,6 +282,4 @@ mod tests {
         }
         Ok(())
     }
-
-    // TODO: add back gadget tests
 }

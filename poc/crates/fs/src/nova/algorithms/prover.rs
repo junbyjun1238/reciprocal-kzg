@@ -1,5 +1,3 @@
-//! Proof generation for Nova.
-
 use ark_ff::{Field, One};
 use ark_std::{borrow::Borrow, cfg_into_iter, cfg_iter, ops::Mul, rand::RngCore};
 #[cfg(feature = "parallel")]
@@ -28,8 +26,6 @@ fn cross_term<'a, F: Field>(
     let z1 = z1.into();
     let z2 = z2.into();
 
-    // Compute the cross term `T` by following the optimized approach in
-    // [Mova](https://eprint.iacr.org/2024/1220.pdf)'s section 5.2.
     let v = arith.evaluate_at(AssignmentsOwned::from((
         z1.constant + z2.constant,
         cfg_iter!(z1.public)

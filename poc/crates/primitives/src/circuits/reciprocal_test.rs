@@ -1,60 +1,30 @@
-//! Test circuits for reciprocal-style PoC integration.
-
 use ark_ff::PrimeField;
-use ark_r1cs_std::{
-    GR1CSVar,
-    fields::fp::FpVar,
-};
+use ark_r1cs_std::{GR1CSVar, fields::fp::FpVar};
 use ark_relations::gr1cs::SynthesisError;
 use thiserror::Error;
 
 use crate::{circuits::FCircuit, traits::SonobeField};
 
-/// [`ReciprocalDescriptorError`] enumerates failures while expanding the
-/// worked `N = 4` reciprocal descriptor.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum ReciprocalDescriptorError {
-    /// The reciprocal-shift update denominator vanished.
     #[error("singular reciprocal-shift descriptor update at c = {c}")]
-    SingularShift {
-        /// Affine shift parameter at which the denominator vanished.
-        c: u64,
-    },
+    SingularShift { c: u64 },
 }
 
-/// [`ReciprocalSeedDescriptorN4`] stores the algebraic seed data needed to
-/// expand the worked `N = 4` reciprocal descriptor.
-///
-/// In the note, the ambient seed is `(n, tau)`. The current PoC does not yet
-/// fix an in-repo quartic extension representation for `tau`, so the exact
-/// algebraic input we keep here is `mu_1`, the coefficient tuple of the monic
-/// minimal polynomial of `tau`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ReciprocalSeedDescriptorN4<F: PrimeField> {
-    /// Coefficient tuple `mu_1 = (mu_{1,0}, mu_{1,1}, mu_{1,2}, mu_{1,3})`.
     pub mu_1: [F; 4],
 }
 
 impl<F: PrimeField> ReciprocalSeedDescriptorN4<F> {
-    /// Creates a worked `N = 4` seed descriptor from the round-1 coefficient
-    /// tuple `mu_1`.
     pub fn new(mu_1: [F; 4]) -> Self {
         Self { mu_1 }
     }
 
-    /// Expands the reduced descriptor `q = mu_2` used by the worked `N = 4`
-    /// evaluator.
-    ///
-    /// This is the exact `c = 0` specialization of Proposition
-    /// `Reciprocal-shift minimal-polynomial update` from the note.
     pub fn reduced_descriptor(&self) -> Result<[F; 4], ReciprocalDescriptorError> {
         reciprocal_shift_descriptor_update(self.mu_1, F::zero())
     }
 
-    /// Returns the uniform per-round descriptor `[mu_1, mu_2]`.
-    ///
-    /// For the evaluator itself only `mu_2` is needed, but keeping `mu_1`
-    /// alongside it mirrors the note's reduced-versus-uniform distinction.
     pub fn uniform_round_descriptors(&self) -> Result<[[F; 4]; 2], ReciprocalDescriptorError> {
         Ok([self.mu_1, self.reduced_descriptor()?])
     }
@@ -159,23 +129,12 @@ fn reciprocal_output_values<F: SonobeField>(
     ])
 }
 
-/// [`ReciprocalCircuitForTest`] is a minimal `FCircuit` for the exact worked
-/// reciprocal evaluator at `N = 4`.
-///
-/// The step state remains a single scalar `x`, while each step instantiates the
-/// real round-by-round reciprocal recurrence on the derived leaf vector
-/// `[x + o_0, x + o_1, x + o_2, x + o_3]`. The public descriptor `q`
-/// corresponds to the worked-example tuple `mu_2`.
 pub struct ReciprocalCircuitForTest<F: PrimeField> {
-    /// Fixed descriptor tuple `mu_2`.
     pub q: [F; 4],
-    /// Fixed public offsets used to derive the 4-leaf input vector from the
-    /// current scalar state.
     pub leaf_offsets: [F; 4],
 }
 
 impl<F: PrimeField> ReciprocalCircuitForTest<F> {
-    /// Builds the worked `N = 4` reciprocal circuit from a seed descriptor.
     pub fn from_seed_descriptor(
         seed: ReciprocalSeedDescriptorN4<F>,
         leaf_offsets: [F; 4],
@@ -186,35 +145,21 @@ impl<F: PrimeField> ReciprocalCircuitForTest<F> {
         })
     }
 
-    /// Returns the concrete `N = 4` leaf vector instantiated by the current
-    /// state value `x`.
     pub fn leaf_vector(&self, x: F) -> [F; 4] {
         core::array::from_fn(|i| x + self.leaf_offsets[i])
     }
 
-    /// Evaluates the circuit's out-of-circuit transition on a concrete state
-    /// value `x` using the exact worked `N = 4` reciprocal recurrence.
     pub fn evaluate(&self, x: F) -> ([F; 4], F) {
         reciprocal_n4_from_leaves(self.q, self.leaf_vector(x))
     }
 }
 
-/// [`NaiveReciprocalCircuitForTest`] is a baseline `FCircuit` that carries the
-/// descriptor and leaf-family metadata inside the step state instead of
-/// specializing it in the circuit configuration.
-///
-/// The state is `[x, q_0, q_1, q_2, q_3, o_0, o_1, o_2, o_3]`, so each step
-/// keeps re-carrying the reciprocal descriptor and leaf instantiation metadata.
 pub struct NaiveReciprocalCircuitForTest<F: PrimeField> {
-    /// Initial descriptor tuple used to seed the state.
     pub q: [F; 4],
-    /// Initial public offsets used to seed the state.
     pub leaf_offsets: [F; 4],
 }
 
 impl<F: PrimeField> NaiveReciprocalCircuitForTest<F> {
-    /// Builds the naive worked `N = 4` reciprocal circuit from a seed
-    /// descriptor.
     pub fn from_seed_descriptor(
         seed: ReciprocalSeedDescriptorN4<F>,
         leaf_offsets: [F; 4],
@@ -225,7 +170,6 @@ impl<F: PrimeField> NaiveReciprocalCircuitForTest<F> {
         })
     }
 
-    /// Returns the concrete state layout used by the naive baseline.
     pub fn initial_state(&self, x: F) -> [F; 9] {
         [
             x,
@@ -240,8 +184,6 @@ impl<F: PrimeField> NaiveReciprocalCircuitForTest<F> {
         ]
     }
 
-    /// Evaluates the out-of-circuit transition on the full naive state using
-    /// the exact worked `N = 4` reciprocal recurrence.
     pub fn evaluate_state(&self, state: [F; 9]) -> ([F; 4], [F; 9]) {
         let x = state[0];
         let q = [state[1], state[2], state[3], state[4]];
@@ -285,8 +227,7 @@ impl<F: SonobeField> FCircuit for ReciprocalCircuitForTest<F> {
     ) -> Result<(Self::StateVar, Self::ExternalOutputs), SynthesisError> {
         let q = self.q.map(FpVar::Constant);
         let leaf_offsets = self.leaf_offsets.map(FpVar::Constant);
-        let (outputs, next_state) =
-            reciprocal_n4_constraints(state[0].clone(), q, leaf_offsets);
+        let (outputs, next_state) = reciprocal_n4_constraints(state[0].clone(), q, leaf_offsets);
         let outputs = reciprocal_output_values(outputs)?;
 
         Ok(([next_state], outputs))
@@ -373,15 +314,19 @@ mod tests {
     fn test_reciprocal_circuit_for_test() -> Result<(), Box<dyn Error>> {
         let circuit = ReciprocalCircuitForTest::from_seed_descriptor(
             sample_seed_descriptor(),
-            [Fr::from(0_u64), Fr::from(1_u64), Fr::from(2_u64), Fr::from(3_u64)],
+            [
+                Fr::from(0_u64),
+                Fr::from(1_u64),
+                Fr::from(2_u64),
+                Fr::from(3_u64),
+            ],
         )?;
 
         let cs = ConstraintSystem::<Fr>::new_ref();
         let i = FpVar::new_witness(cs.clone(), || Ok(Fr::zero()))?;
-        let state =
-            <[FpVar<Fr>; 1] as AllocVar<[Fr; 1], Fr>>::new_witness(cs.clone(), || {
-                Ok([Fr::from(3_u64)])
-            })?;
+        let state = <[FpVar<Fr>; 1] as AllocVar<[Fr; 1], Fr>>::new_witness(cs.clone(), || {
+            Ok([Fr::from(3_u64)])
+        })?;
 
         let (next_state, outputs) = circuit.generate_step_constraints(i, state, ())?;
         let (expected_outputs, expected_next_state) = circuit.evaluate(Fr::from(3_u64));
@@ -397,15 +342,19 @@ mod tests {
     fn test_naive_reciprocal_circuit_for_test() -> Result<(), Box<dyn Error>> {
         let circuit = NaiveReciprocalCircuitForTest::from_seed_descriptor(
             sample_seed_descriptor(),
-            [Fr::from(0_u64), Fr::from(1_u64), Fr::from(2_u64), Fr::from(3_u64)],
+            [
+                Fr::from(0_u64),
+                Fr::from(1_u64),
+                Fr::from(2_u64),
+                Fr::from(3_u64),
+            ],
         )?;
 
         let cs = ConstraintSystem::<Fr>::new_ref();
         let i = FpVar::new_witness(cs.clone(), || Ok(Fr::zero()))?;
-        let state =
-            <[FpVar<Fr>; 9] as AllocVar<[Fr; 9], Fr>>::new_witness(cs.clone(), || {
-                Ok(circuit.initial_state(Fr::from(3_u64)))
-            })?;
+        let state = <[FpVar<Fr>; 9] as AllocVar<[Fr; 9], Fr>>::new_witness(cs.clone(), || {
+            Ok(circuit.initial_state(Fr::from(3_u64)))
+        })?;
 
         let (next_state, outputs) = circuit.generate_step_constraints(i, state, ())?;
         let (expected_outputs, expected_next_state) =
@@ -422,21 +371,28 @@ mod tests {
     fn test_reciprocal_circuit_matches_worked_n4_matrix_formula() {
         let circuit = ReciprocalCircuitForTest::from_seed_descriptor(
             sample_seed_descriptor(),
-            [Fr::from(0_u64), Fr::from(1_u64), Fr::from(2_u64), Fr::from(3_u64)],
+            [
+                Fr::from(0_u64),
+                Fr::from(1_u64),
+                Fr::from(2_u64),
+                Fr::from(3_u64),
+            ],
         )
         .expect("sample seed descriptor should expand");
         let x = Fr::from(7_u64);
         let leaves = circuit.leaf_vector(x);
         let (outputs, _) = circuit.evaluate(x);
-        let mu_sum = circuit.q.into_iter().fold(Fr::zero(), |acc, value| acc + value);
+        let mu_sum = circuit
+            .q
+            .into_iter()
+            .fold(Fr::zero(), |acc, value| acc + value);
         let expected = [
             (Fr::from(2_u64) - circuit.q[3]) * leaves[0] - leaves[1]
                 + (circuit.q[3] - Fr::from(1_u64)) * leaves[2]
                 + leaves[3],
             (Fr::from(5_u64) - circuit.q[2] - Fr::from(3_u64) * circuit.q[3]) * leaves[0]
                 - Fr::from(2_u64) * leaves[1]
-                + (circuit.q[2] + Fr::from(3_u64) * circuit.q[3] - Fr::from(3_u64))
-                    * leaves[2]
+                + (circuit.q[2] + Fr::from(3_u64) * circuit.q[3] - Fr::from(3_u64)) * leaves[2]
                 + Fr::from(3_u64) * leaves[3],
             (Fr::from(4_u64)
                 - circuit.q[1]
@@ -444,9 +400,7 @@ mod tests {
                 - Fr::from(3_u64) * circuit.q[3])
                 * leaves[0]
                 - leaves[1]
-                + (circuit.q[1]
-                    + Fr::from(2_u64) * circuit.q[2]
-                    + Fr::from(3_u64) * circuit.q[3]
+                + (circuit.q[1] + Fr::from(2_u64) * circuit.q[2] + Fr::from(3_u64) * circuit.q[3]
                     - Fr::from(3_u64))
                     * leaves[2]
                 + Fr::from(3_u64) * leaves[3],
@@ -463,7 +417,12 @@ mod tests {
         let q = sample_seed_descriptor().reduced_descriptor()?;
         assert_eq!(
             q,
-            [Fr::from(1_u64), Fr::from(2_u64), Fr::from(3_u64), Fr::from(4_u64)]
+            [
+                Fr::from(1_u64),
+                Fr::from(2_u64),
+                Fr::from(3_u64),
+                Fr::from(4_u64)
+            ]
         );
         Ok(())
     }
@@ -475,7 +434,12 @@ mod tests {
         assert_eq!(uniform[0], seed.mu_1);
         assert_eq!(
             uniform[1],
-            [Fr::from(1_u64), Fr::from(2_u64), Fr::from(3_u64), Fr::from(4_u64)]
+            [
+                Fr::from(1_u64),
+                Fr::from(2_u64),
+                Fr::from(3_u64),
+                Fr::from(4_u64)
+            ]
         );
         Ok(())
     }

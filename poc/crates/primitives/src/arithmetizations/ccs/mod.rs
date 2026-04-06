@@ -1,24 +1,3 @@
-//! This module implements the Customizable Constraint System (CCS) and its
-//! relation checks against plain witnesses and instances.
-//!
-//! Proposed in the CCS [paper], it is a generalization of R1CS as well as many
-//! other constraint systems.
-//! A CCS structure is defined by the following components:
-//! - The number of constraints `m`, the number of variables `n`, and the number
-//!   of public inputs `l`.
-//! - The degree `d`.
-//! - A sequence of `t` matrices `M`.
-//! - A sequence of `q` multisets `S`, where each multiset `S_i` has at most `d`
-//!   elements and each element is an index in `[0, t - 1]` pointing to a matrix
-//!   `M_j`.
-//! - A sequence of `q` coefficients `c`.
-//!
-//! A vector of assignments `z` satisfies the CCS if its evaluation
-//! `Σ_{i ∈ {0, q-1}} (c_i · 〇_{j ∈ S_i} (M_j · z))` is zero, where `〇` denotes
-//! the Hadamard product among all `M_j · z`.
-//!
-//! [paper]: https://eprint.iacr.org/2023/552.pdf
-
 use ark_ff::Field;
 use ark_poly::DenseMultilinearExtension;
 use ark_relations::gr1cs::{ConstraintSystem, Matrix};
@@ -36,35 +15,22 @@ use crate::{
 
 pub mod circuits;
 
-/// [`CCSVariant`] defines the methods that a CCS variant (e.g., R1CS) should
-/// implement.
 pub trait CCSVariant: Clone + Debug + PartialEq + Default + Sync + Send {
-    /// [`CCSVariant::n_matrices`] returns the number of matrices in the CCS
-    /// variant.
     fn n_matrices() -> usize;
 
-    /// [`CCSVariant::degree`] returns the degree of the CCS variant.
     fn degree() -> usize;
 
-    /// [`CCSVariant::multisets_vec`] returns the vector of multisets in the CCS
-    /// variant.
     fn multisets_vec() -> Vec<Vec<usize>>;
 
-    /// [`CCSVariant::coefficients_vec`] returns the vector of coefficients in
-    /// the CCS variant.
     fn coefficients_vec<F: Field>() -> Vec<F>;
 }
 
-/// [`CCSConfig`] stores the shape parameters of a CCS structure.
 #[allow(non_snake_case)]
 #[derive(Clone, Debug, Default, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct CCSConfig<V: CCSVariant> {
     _v: PhantomData<V>,
-    /// m: number of rows in M_i (such that M_i \in F^{m, n})
     m: usize,
-    /// n = |z|, number of cols in M_i
     n: usize,
-    /// l = |io|, size of public input/output
     l: usize,
 }
 
@@ -113,7 +79,6 @@ impl<F: Field, V: CCSVariant> From<&ConstraintSystem<F>> for CCSConfig<V> {
     }
 }
 
-/// [`CCS`] holds the CCS matrices `M` together with the configuration.
 #[allow(non_snake_case)]
 #[derive(Clone, CanonicalSerialize, CanonicalDeserialize)]
 pub struct CCS<F: Field, V: CCSVariant> {
@@ -123,8 +88,6 @@ pub struct CCS<F: Field, V: CCSVariant> {
 }
 
 impl<F: Field, V: CCSVariant> CCS<F, V> {
-    /// [`CCS::evaluate_at`] evaluates the CCS relation at a given vector of
-    /// assignments `z`.
     pub fn evaluate_at(&self, z: Assignments<F, impl AsRef<[F]> + Sync>) -> Result<Vec<F>, Error> {
         let cfg = &self.cfg;
 
@@ -145,32 +108,15 @@ impl<F: Field, V: CCSVariant> CCS<F, V> {
             )));
         }
 
-        // Recall that the evaluation of CCS at z is defined as:
-        // `Σ_{i ∈ {0, q-1}} (c_i · 〇_{j ∈ S_i} (M_j · z))`,
-        // where $\prod$ denotes the Hadamard product.
-        //
-        // Below, we manually expand the vector and matrix operations for less
-        // allocations and better efficiency.
-        // Specifically, we independently compute each entry of the resulting
-        // vector, and collect them at the end.
-        // We parallelize the outer loop over rows (when the `parallel` feature
-        // is enabled), since the number of constraints in the CCS is typically
-        // large in practice.
         Ok(cfg_into_iter!(0..cfg.n_constraints())
             .map(|row| {
-                // The `row`-th entry of the resulting vector is:
-                // `Σ_{i ∈ {0, q-1}} (c_i · 〇_{j ∈ S_i} (M_j[row] · z))`
                 V::multisets_vec()
                     .into_iter()
                     .zip(V::coefficients_vec::<F>())
                     .map(|(s, c)| {
-                        // Each term in the sum is:
-                        // `c_i · 〇_{j ∈ S_i} (M_j[row] · z)`
                         c * s
                             .iter()
                             .map(|&i| {
-                                // Each factor in the product is `M_j[row] · z`,
-                                // i.e., the dot product of `M_j[row]` and `z`.
                                 self.M[i][row]
                                     .iter()
                                     .map(|(val, col)| z[*col] * val)
@@ -183,8 +129,6 @@ impl<F: Field, V: CCSVariant> CCS<F, V> {
             .collect())
     }
 
-    /// [`CCS::mles`] returns the multilinear extensions of all CCS matrices
-    /// `M_i` evaluated over the assignments `z`.
     pub fn mles(
         &self,
         z: Assignments<F, impl AsRef<[F]> + Sync>,

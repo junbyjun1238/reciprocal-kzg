@@ -1,5 +1,3 @@
-//! This module implements in-circuit R1CS variables and relation check gadgets.
-
 use ark_ff::{PrimeField, Zero};
 use ark_r1cs_std::alloc::{AllocVar, AllocationMode};
 use ark_relations::gr1cs::{Namespace, SynthesisError};
@@ -16,12 +14,6 @@ use crate::{
     circuits::Assignments,
 };
 
-/// [`R1CSMatricesVar`] is the in-circuit variable of a given R1CS structure.
-///
-/// Only the matrices are represented, while the remaining R1CS parameters are
-/// constants to the circuit.
-///
-/// The naming is chosen to distinguish from arkworks' `(G)R1CSVar`.
 #[allow(non_snake_case)]
 #[derive(Debug, Clone)]
 pub struct R1CSMatricesVar<FVar> {
@@ -58,16 +50,11 @@ where
     [FVar]: VectorGadget<FVar>,
     for<'a> &'a FVar: Mul<&'a FVar, Output = FVar>,
 {
-    /// [`R1CSMatricesVar::evaluate_at`] is the in-circuit version of
-    /// [`R1CS::evaluate_at`] that evaluates the R1CS variable at a given vector
-    /// of assignments `z`.
     #[allow(non_snake_case)]
     pub fn evaluate_at(
         &self,
         z: Assignments<FVar, impl AsRef<[FVar]>>,
     ) -> Result<Vec<FVar>, SynthesisError> {
-        // Multiply Cz by z[0] (u) here, allowing this method to be reused for
-        // both relaxed and plain R1CS.
         let Az = self.A.mul_vector(&z)?;
         let Bz = self.B.mul_vector(&z)?;
         let Cz = self.C.mul_vector(&z)?;
@@ -82,7 +69,6 @@ impl<FVar, WVar: AsRef<[FVar]>, UVar: AsRef<[FVar]>> ArithRelationGadget<WVar, U
 where
     SparseMatrixVar<FVar>: MatrixGadget<FVar>,
     [FVar]: VectorGadget<FVar> + EquivalenceGadget<[FVar]>,
-    // TODO (@winderica): this will not work for our incoming decider
     FVar: Clone + Zero + One,
     for<'a> &'a FVar: Mul<&'a FVar, Output = FVar>,
 {

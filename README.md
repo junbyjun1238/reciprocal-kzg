@@ -1,27 +1,17 @@
 # reciprocal-kzg
 
-This repository packages a Sonobe extension for a reciprocal
+This repository contains a Sonobe extension for a reciprocal
 descriptor-opening backend.
 
-The checked-in implementation is a reciprocal PoC, and the next implementation
-milestone is a KZG-backed descriptor-opening path.
-
-## Current Scope
-
-- The checked-in implementation is a Pedersen-backed reciprocal PoC over a Sonobe-derived Rust workspace.
-- The implemented path already includes the reciprocal kernel, adapter, wrapper, offchain decider, and benchmark artifacts.
-- The next implementation milestone is a real KZG descriptor-opening library and its integration path.
+The current codebase is a Pedersen-backed reciprocal PoC built within a
+Sonobe-derived Rust workspace. The next milestone is a KZG-backed
+descriptor-opening backend.
 
 ## Repository Layout
 
-- `poc/`: Sonobe-derived workspace plus reciprocal-specific implementation and integration code
-- `benchmark/`: canonical benchmark artifacts for the current PoC
-- `docs/`: paper note, PoC write-up, milestone plan, and public project documentation
-
-## Current Status
-
-- The reciprocal kernel, adapter, wrapper, and offchain decider paths are implemented and tested in `poc/`.
-- The benchmark package tracks both the Sonobe-integrated path and the arithmetic kernel path.
+- `poc/`: the Sonobe-derived Rust workspace and reciprocal-specific code
+- `benchmark/`: canonical CSV artifacts plus rerun / reproducibility scripts
+- `docs/`: the PoC write-up, milestone plan, and research note
 
 ## Start Here
 
@@ -30,7 +20,7 @@ milestone is a KZG-backed descriptor-opening path.
 3. `poc/README.md`
 4. `benchmark/README.md`
 
-## Quick Run
+## Run The PoC
 
 From `poc/`:
 
@@ -40,19 +30,21 @@ cargo test -p sonobe-ivc reciprocal_ -- --nocapture
 cargo run -p sonobe-ivc --example reciprocal_poc
 ```
 
-The canonical checked-in benchmark artifacts live at:
+## Benchmark Artifacts
 
-- `benchmark/reciprocal_snapshot.csv`: Sonobe-integrated PoC snapshot comparing the stock reference row, the naive reciprocal baseline, and the specialized reciprocal path
-- `benchmark/reciprocal_kernel_snapshot.csv`: arithmetic kernel scaling snapshot up to depth 16 comparing the specialized reciprocal backend against direct fixed-basis and explicit-row baselines
+The canonical CSV artifacts are:
 
-To re-check the checked-in benchmark conclusions after cloning:
+- `benchmark/reciprocal_snapshot.csv`: an integration-level benchmark comparing the reference circuit, the naive reciprocal baseline, and the specialized reciprocal variant
+- `benchmark/reciprocal_kernel_snapshot.csv`: a scaling benchmark for the arithmetic kernel, up to depth 16, comparing the specialized reciprocal backend against direct fixed-basis and explicit-row baselines
+
+To reproduce the benchmark results locally after cloning:
 
 ```powershell
 ./benchmark/verify_repro.ps1
 ```
 
-This script compares the rerun benchmark output against the checked-in CSVs on
-their structural metrics. Timing columns are intentionally treated as local and
+This script compares rerun outputs against the canonical CSVs on structural
+metrics only. Timing columns are intentionally treated as local and
 non-canonical.
 
 ## License

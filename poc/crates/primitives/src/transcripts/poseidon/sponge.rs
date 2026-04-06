@@ -1,18 +1,17 @@
 //! Implementation of transcript traits for arkworks' Poseidon sponge.
 
 use ark_crypto_primitives::sponge::{
-    Absorb, CryptographicSponge, FieldBasedCryptographicSponge,
+    CryptographicSponge, FieldBasedCryptographicSponge,
     constraints::CryptographicSpongeVar,
     poseidon::{PoseidonConfig, PoseidonSponge, constraints::PoseidonSpongeVar},
 };
 use ark_ff::PrimeField;
 use ark_r1cs_std::{boolean::Boolean, fields::fp::FpVar};
 use ark_relations::gr1cs::{ConstraintSystemRef, SynthesisError};
-use ark_std::mem::transmute_copy;
 
 use crate::transcripts::{AbsorbableVar, Transcript, TranscriptGadget};
 
-impl<F: PrimeField> Transcript<F> for PoseidonSponge<F> {
+impl<F: PrimeField + ark_crypto_primitives::sponge::Absorb> Transcript<F> for PoseidonSponge<F> {
     type Config = PoseidonConfig<F>;
     type Gadget = PoseidonSpongeVar<F>;
 
@@ -21,22 +20,7 @@ impl<F: PrimeField> Transcript<F> for PoseidonSponge<F> {
     }
 
     fn add_field_elements(&mut self, input: &[F]) -> &mut Self {
-        struct Hack<I>(I);
-        impl<F> Absorb for Hack<&[F]> {
-            fn to_sponge_bytes(&self, _: &mut Vec<u8>) {
-                // Unreachable because `PoseidonSponge::absorb` only calls
-                // `to_sponge_field_elements_as_vec::<F>`
-                unreachable!()
-            }
-
-            fn to_sponge_field_elements<T: PrimeField>(&self, dest: &mut Vec<T>) {
-                // Safe because `F` in `to_sponge_field_elements_as_vec::<F>`,
-                // which is called by `PoseidonSponge::absorb`, is the same as
-                // `T` here.
-                dest.extend(unsafe { transmute_copy::<&[F], &[T]>(&self.0) });
-            }
-        }
-        CryptographicSponge::absorb(self, &Hack(input));
+        CryptographicSponge::absorb(self, &input);
         self
     }
 
@@ -49,7 +33,9 @@ impl<F: PrimeField> Transcript<F> for PoseidonSponge<F> {
     }
 }
 
-impl<F: PrimeField> TranscriptGadget<F> for PoseidonSpongeVar<F> {
+impl<F: PrimeField + ark_crypto_primitives::sponge::Absorb> TranscriptGadget<F>
+    for PoseidonSpongeVar<F>
+{
     type Widget = PoseidonSponge<F>;
 
     fn new(config: &PoseidonConfig<F>) -> Self
@@ -116,6 +102,30 @@ mod tests {
             )
             .unwrap()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_field_elements_matches_direct_poseidon_absorb() -> Result<(), Box<dyn Error>> {
+        let config = poseidon_canonical_config::<Fr>();
+        let input = [1_u64, 2, 3, 4].map(Fr::from);
+
+        let mut transcript_sponge = PoseidonSponge::<Fr>::new(&config);
+        transcript_sponge.add_field_elements(&input);
+        let transcript_output = transcript_sponge.get_field_elements(1);
+
+        let mut direct_sponge = PoseidonSponge::<Fr>::new(&config);
+        ark_crypto_primitives::sponge::CryptographicSponge::absorb(
+            &mut direct_sponge,
+            &&input[..],
+        );
+        let direct_output =
+            ark_crypto_primitives::sponge::FieldBasedCryptographicSponge::squeeze_native_field_elements(
+                &mut direct_sponge,
+                1,
+            );
+
+        assert_eq!(transcript_output, direct_output);
         Ok(())
     }
 

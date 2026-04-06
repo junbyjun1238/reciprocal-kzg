@@ -1,4 +1,4 @@
-use std::{hint::black_box, time::Instant};
+﻿use std::{hint::black_box, time::Instant};
 
 use ark_bn254::Fr;
 use ark_ff::{Field, One, UniformRand, Zero};

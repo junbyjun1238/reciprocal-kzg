@@ -1,6 +1,3 @@
-//! Definitions of Nova keys and trait implementations for relation checks and
-//! witness-instance sampling using Nova keys.
-
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{UniformRand, rand::RngCore, sync::Arc};
 use sonobe_primitives::{
@@ -19,7 +16,6 @@ use super::{
 };
 use crate::{DeciderKey, Error, PlainInstance as PU, PlainWitness as PW};
 
-/// [`NovaKey`] is Nova's decider key.
 #[derive(Clone, CanonicalSerialize, CanonicalDeserialize)]
 pub struct NovaKey<A: Arith, CM: CommitmentDef> {
     pub(super) arith: Arc<A>,

@@ -1,12 +1,3 @@
-//! This module provides implementation of in-circuit variables for emulated
-//! elliptic curve points.
-//!
-//! This is useful when we want to express points whose coordinates lie in a
-//! different field than the circuit's constraint field.
-//!
-//! Note that currently this module only provides the representation of such
-//! points, without any arithmetic operations.
-
 use ark_ec::{AffineRepr, short_weierstrass::SWFlags};
 use ark_ff::Zero;
 use ark_r1cs_std::{
@@ -27,17 +18,9 @@ use crate::{
     transcripts::AbsorbableVar,
 };
 
-/// [`EmulatedAffineVar`] defines an in-circuit elliptic curve point with its
-/// affine representation, where the coordinates are in the curve's base field
-/// `Target::BaseField` and are emulated over the constraint field `Base` in the
-/// circuit.
 #[derive(Debug, Clone)]
 pub struct EmulatedAffineVar<Base: SonobeField, Target: SonobeCurve> {
-    /// [`EmulatedAffineVar::x`] is the x-coordinate of the point's affine
-    /// representation.
     pub x: EmulatedFieldVar<Base, Target::BaseField>,
-    /// [`EmulatedAffineVar::y`] is the y-coordinate of the point's affine
-    /// representation.
     pub y: EmulatedFieldVar<Base, Target::BaseField>,
 }
 
@@ -73,13 +56,8 @@ impl<Base: SonobeField, Target: SonobeCurve> GR1CSVar<Base> for EmulatedAffineVa
     fn value(&self) -> Result<Self::Value, SynthesisError> {
         let x = self.x.value()?;
         let y = self.y.value()?;
-        // Below is a workaround to convert the `x` and `y` coordinates to a
-        // point. This is because the `SonobeCurve` trait does not provide a
-        // method to construct a point from `BaseField` elements.
         let mut bytes = vec![];
         // `unwrap` below is safe because serialization of a `PrimeField` value
-        // only fails if the serialization flag has more than 8 bits, but here
-        // we call `serialize_uncompressed` which uses an empty flag.
         x.serialize_uncompressed(&mut bytes).unwrap();
         // `unwrap` below is also safe, because the bit size of `SWFlags` is 2.
         y.serialize_with_flags(
@@ -94,8 +72,6 @@ impl<Base: SonobeField, Target: SonobeCurve> GR1CSVar<Base> for EmulatedAffineVa
         )
         .unwrap();
         // `unwrap` below is safe because `bytes` is constructed from the `x`
-        // and `y` coordinates of a valid point, and these coordinates are
-        // serialized in the same way as the `SonobeCurve` implementation.
         Ok(Target::deserialize_uncompressed_unchecked(&bytes[..]).unwrap())
     }
 }
@@ -113,11 +89,8 @@ impl<Base: SonobeField, Target: SonobeCurve> EqGadget<Base> for EmulatedAffineVa
 }
 
 impl<Base: SonobeField, Target: SonobeCurve> EmulatedAffineVar<Base, Target> {
-    /// [`EmulatedAffineVar::zero`] allocates the zero point (point at infinity)
-    /// of the curve as a constant.
     pub fn zero() -> Self {
         // `unwrap` below is safe because we are allocating a constant value,
-        // which is guaranteed to succeed.
         Self::new_constant(ConstraintSystemRef::None, Target::zero()).unwrap()
     }
 }
@@ -164,7 +137,6 @@ mod tests {
     fn test_alloc_zero() {
         let cs = ConstraintSystem::<Fr>::new_ref();
 
-        // dealing with the 'zero' point should not panic when doing the unwrap
         let p = Projective::zero();
         assert!(EmulatedAffineVar::<Fr, Projective>::new_witness(cs.clone(), || Ok(p)).is_ok());
     }

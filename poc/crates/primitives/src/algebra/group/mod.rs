@@ -1,6 +1,3 @@
-//! This module defines extension traits for elliptic curve points and their
-//! in-circuit counterparts, along with some common implementations.
-
 use ark_ec::{
     AffineRepr, CurveGroup, PrimeGroup,
     short_weierstrass::{Projective, SWCurveConfig},
@@ -22,13 +19,9 @@ use crate::{
 
 pub mod emulated;
 
-/// [`CF1`] is a type alias for the scalar field of a curve `C`.
 pub type CF1<C> = <C as PrimeGroup>::ScalarField;
-/// [`CF2`] is a type alias for the base field of a curve `C`.
 pub type CF2<C> = <<C as CurveGroup>::BaseField as Field>::BasePrimeField;
 
-/// [`SonobeCurve`] trait is a wrapper around [`CurveGroup`] that also includes
-/// necessary bounds for the curve to be used conveniently in folding schemes.
 pub trait SonobeCurve:
     CurveGroup<ScalarField: SonobeField, BaseField: SonobeField, Config: SWCurveConfig>
     + Absorbable
@@ -72,13 +65,8 @@ impl<P: SWCurveConfig<BaseField: PrimeField>> AbsorbableVar<P::BaseField>
 {
     fn absorb_into(&self, dest: &mut Vec<FpVar<P::BaseField>>) -> Result<(), SynthesisError> {
         let mut vec = self.to_constraint_field()?;
-        // The last element in the vector tells whether the point is infinity,
         // but we can in fact avoid absorbing it without loss of soundness.
         // This is because the `to_constraint_field` method internally invokes
-        // [`ProjectiveVar::to_afine`](https://github.com/arkworks-rs/r1cs-std/blob/4020fbc22625621baa8125ede87abaeac3c1ca26/src/groups/curves/short_weierstrass/mod.rs#L160-L195),
-        // which guarantees that an infinity point is represented as `(0, 0)`,
-        // but the y-coordinate of a non-infinity point is never 0 (for why, see
-        // https://crypto.stackexchange.com/a/108242 ).
         vec.pop();
         dest.extend(vec);
         Ok(())
@@ -110,8 +98,6 @@ impl<P: SWCurveConfig<BaseField: PrimeField>> WitnessToPublic
     for ProjectiveVar<P, FpVar<P::BaseField>>
 {
     fn mark_as_public(&self) -> Result<(), SynthesisError> {
-        // We only need the x and y coordinates of the point, but the `infinity`
-        // flag is not necessary.
         self.to_constraint_field()?[..2].mark_as_public()
     }
 }
