@@ -108,7 +108,10 @@ impl<F: Field> R1CS<F> {
         cfg_iter!(self.A).zip(&self.B).zip(&self.C).map(f).collect()
     }
 
-    pub fn evaluate_at(&self, z: Assignments<F, impl AsRef<[F]> + Sync>) -> Result<Vec<F>, Error> {
+    fn validate_assignments<A: AsRef<[F]> + Sync>(
+        &self,
+        z: &Assignments<F, A>,
+    ) -> Result<(), Error> {
         let cfg = &self.cfg;
 
         let public_len = z.public.as_ref().len();
@@ -127,6 +130,12 @@ impl<F: Field> R1CS<F> {
                 private_len
             )));
         }
+
+        Ok(())
+    }
+
+    pub fn evaluate_at(&self, z: Assignments<F, impl AsRef<[F]> + Sync>) -> Result<Vec<F>, Error> {
+        self.validate_assignments(&z)?;
 
         self.evaluate_rows(|((a, b), c)| {
             let az = a.iter().map(|(val, col)| z[*col] * val).sum::<F>();

@@ -37,6 +37,59 @@ mod tests {
 
     use super::*;
 
+    fn sample_running_pool<FS: FoldingSchemeDecider, const M: usize>(
+        dk: &FS::DeciderKey,
+        rng: &mut impl Rng,
+    ) -> Result<([FS::RW; M], [FS::RU; M]), Box<dyn Error>> {
+        let mut running_ws = vec![];
+        let mut running_us = vec![];
+        for _ in 0..M {
+            let (w, u) = WitnessInstanceSampler::<FS::RW, FS::RU>::sample(dk, (), &mut *rng)?;
+            FS::decide_running(dk, &w, &u)?;
+            running_ws.push(w);
+            running_us.push(u);
+        }
+        Ok((
+            running_ws.try_into().unwrap(),
+            running_us.try_into().unwrap(),
+        ))
+    }
+
+    fn sample_incoming_pool<FS: FoldingSchemeDecider, const N: usize>(
+        dk: &FS::DeciderKey,
+        assignments: AssignmentsOwned<<FS::CM as CommitmentDef>::Scalar>,
+        rng: &mut impl Rng,
+    ) -> Result<([FS::IW; N], [FS::IU; N]), Box<dyn Error>> {
+        let mut ws = vec![];
+        let mut us = vec![];
+        for _ in 0..N {
+            let (w, u) = WitnessInstanceSampler::<FS::IW, FS::IU>::sample(
+                dk,
+                assignments.clone(),
+                &mut *rng,
+            )?;
+            FS::decide_incoming(dk, &w, &u)?;
+            ws.push(w);
+            us.push(u);
+        }
+        Ok((ws.try_into().unwrap(), us.try_into().unwrap()))
+    }
+
+    fn refresh_running_pool<FS: FoldingSchemeDecider, const M: usize>(
+        dk: &FS::DeciderKey,
+        running_ws: &mut [FS::RW; M],
+        running_us: &mut [FS::RU; M],
+        rng: &mut impl Rng,
+    ) -> Result<(), Box<dyn Error>> {
+        for i in 0..M {
+            let (w, u) = WitnessInstanceSampler::<FS::RW, FS::RU>::sample(dk, (), &mut *rng)?;
+            FS::decide_running(dk, &w, &u)?;
+            running_ws[i] = w;
+            running_us[i] = u;
+        }
+        Ok(())
+    }
+
     #[allow(non_snake_case)]
     pub fn test_folding_scheme<FS: FoldingSchemeOps<M, N>, const M: usize, const N: usize>(
         config: FS::Config,
@@ -56,16 +109,7 @@ mod tests {
         let pk = dk.to_pk();
         let vk = dk.to_vk();
 
-        let mut Ws = vec![];
-        let mut Us = vec![];
-        for _ in 0..M {
-            let (W, U) = WitnessInstanceSampler::<FS::RW, FS::RU>::sample(&dk, (), &mut rng)?;
-            FS::decide_running(&dk, &W, &U)?;
-            Ws.push(W);
-            Us.push(U);
-        }
-        let mut Ws = Ws.try_into().unwrap();
-        let mut Us = Us.try_into().unwrap();
+        let (mut Ws, mut Us) = sample_running_pool::<FS, M>(&dk, &mut rng)?;
 
         let config = Arc::new(GriffinParams::new(16, 5, 9));
 
@@ -73,31 +117,13 @@ mod tests {
         let mut transcript_v = GriffinSponge::new(&config);
 
         for assignments in assignments_vec {
-            let mut ws = vec![];
-            let mut us = vec![];
-            for _ in 0..N {
-                let (w, u) = WitnessInstanceSampler::<FS::IW, FS::IU>::sample(
-                    &dk,
-                    assignments.clone(),
-                    &mut rng,
-                )?;
-                FS::decide_incoming(&dk, &w, &u)?;
-                ws.push(w);
-                us.push(u);
-            }
-            let ws = ws.try_into().unwrap();
-            let us = us.try_into().unwrap();
+            let (ws, us) = sample_incoming_pool::<FS, N>(&dk, assignments, &mut rng)?;
 
             let (WW, UU, pi, _) = FS::prove(pk, &mut transcript_p, &Ws, &Us, &ws, &us, &mut rng)?;
             FS::decide_running(&dk, &WW, &UU)?;
             assert_eq!(FS::verify(vk, &mut transcript_v, &Us, &us, &pi)?, UU);
 
-            for i in 0..M {
-                let (W, U) = WitnessInstanceSampler::<FS::RW, FS::RU>::sample(&dk, (), &mut rng)?;
-                FS::decide_running(&dk, &W, &U)?;
-                Ws[i] = W;
-                Us[i] = U;
-            }
+            refresh_running_pool::<FS, M>(&dk, &mut Ws, &mut Us, &mut rng)?;
             if M != 0 {
                 let idx = rng.gen_range(0..M);
                 Ws[idx] = WW;

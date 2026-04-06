@@ -208,7 +208,11 @@ mod tests {
     use ark_bn254::{Fr, G1Projective as C1};
     use ark_ff::UniformRand;
     use ark_grumpkin::Projective as C2;
-    use ark_std::{error::Error, rand::thread_rng, sync::Arc};
+    use ark_std::{
+        error::Error,
+        rand::{RngCore, thread_rng},
+        sync::Arc,
+    };
     use sonobe_primitives::{
         circuits::{
             FCircuit,
@@ -240,6 +244,55 @@ mod tests {
         tests::test_ivc,
     };
 
+    type TestIVC = NovaNovaIVC<Pedersen<C1, true>, Pedersen<C2, true>, GriffinSponge<Fr>>;
+
+    fn setup_reciprocal_ivc(
+        rng: &mut impl RngCore,
+    ) -> Result<
+        (
+            ReciprocalCircuitForTest<Fr>,
+            ReciprocalSameQLane<Pedersen<C1, true>>,
+            <TestIVC as IVC>::ProverKey<ReciprocalCircuitForTest<Fr>>,
+            <TestIVC as IVC>::VerifierKey<ReciprocalCircuitForTest<Fr>>,
+        ),
+        Box<dyn Error>,
+    > {
+        let step_circuit = sample_reciprocal_circuit()?;
+        let lane = ReciprocalSameQLane::<Pedersen<C1, true>>::new(step_circuit.q.to_vec())?;
+        let pp = TestIVC::preprocess(
+            (65536, 2048, Arc::new(GriffinParams::new(16, 5, 9))),
+            &mut *rng,
+        )?;
+        let (pk, vk) = TestIVC::generate_keys(pp, &step_circuit)?;
+        Ok((step_circuit, lane, pk, vk))
+    }
+
+    fn assert_reciprocal_opening_statement(
+        step_circuit: &ReciprocalCircuitForTest<Fr>,
+        lane: &ReciprocalSameQLane<Pedersen<C1, true>>,
+        current_state: &<ReciprocalCircuitForTest<Fr> as FCircuit>::State,
+        external_outputs: <ReciprocalCircuitForTest<Fr> as FCircuit>::ExternalOutputs,
+        rng: &mut impl RngCore,
+    ) -> Result<(), Box<dyn Error>> {
+        let leaf_vector = step_circuit.leaf_vector(current_state[0]).to_vec();
+        let ck = <Pedersen<C1, true> as CommitmentOps>::generate_key(leaf_vector.len(), &mut *rng)?;
+        let (cm_x, omega) =
+            <Pedersen<C1, true> as CommitmentOps>::commit(&ck, &leaf_vector, &mut *rng)?;
+        let (trace, expected_y) = reciprocal_n4_trace_and_output(&lane.q().to_vec(), &leaf_vector)?;
+        assert_eq!(external_outputs, expected_y);
+        let witness = ReciprocalWitness {
+            x: leaf_vector,
+            trace,
+            omega,
+        };
+        let instance = lane.bind(cm_x, external_outputs);
+        let statement = ReciprocalCycleFoldAdapter::build_opening_statement_in_lane(
+            &ck, lane, &instance, witness,
+        )?;
+        ReciprocalCycleFoldAdapter::verify_opening_statement_in_lane(&ck, lane, &statement)?;
+        Ok(())
+    }
+
     #[test]
     fn test_nova_nova() -> Result<(), Box<dyn Error>> {
         let mut rng = thread_rng();
@@ -258,17 +311,8 @@ mod tests {
 
     #[test]
     fn test_nova_nova_reciprocal_circuit_outputs() -> Result<(), Box<dyn Error>> {
-        type TestIVC = NovaNovaIVC<Pedersen<C1, true>, Pedersen<C2, true>, GriffinSponge<Fr>>;
-
         let mut rng = thread_rng();
-        let step_circuit = sample_reciprocal_circuit()?;
-        let lane = ReciprocalSameQLane::<Pedersen<C1, true>>::new(step_circuit.q.to_vec())?;
-
-        let pp = TestIVC::preprocess(
-            (65536, 2048, Arc::new(GriffinParams::new(16, 5, 9))),
-            &mut rng,
-        )?;
-        let (pk, vk) = TestIVC::generate_keys(pp, &step_circuit)?;
+        let (step_circuit, lane, pk, vk) = setup_reciprocal_ivc(&mut rng)?;
 
         let initial_state = step_circuit.dummy_state();
         let mut current_state = initial_state;
@@ -289,7 +333,6 @@ mod tests {
 
             assert_eq!(external_outputs, expected_outputs);
             assert_eq!(next_state, [expected_next_state]);
-
             TestIVC::verify::<ReciprocalCircuitForTest<Fr>>(
                 &vk,
                 step + 1,
@@ -297,25 +340,13 @@ mod tests {
                 &next_state,
                 &next_proof,
             )?;
-
-            let leaf_vector = step_circuit.leaf_vector(current_state[0]).to_vec();
-            let ck =
-                <Pedersen<C1, true> as CommitmentOps>::generate_key(leaf_vector.len(), &mut rng)?;
-            let (cm_x, omega) =
-                <Pedersen<C1, true> as CommitmentOps>::commit(&ck, &leaf_vector, &mut rng)?;
-            let (trace, expected_y) =
-                reciprocal_n4_trace_and_output(&lane.q().to_vec(), &leaf_vector)?;
-            assert_eq!(external_outputs, expected_y);
-            let witness = ReciprocalWitness {
-                x: leaf_vector,
-                trace,
-                omega,
-            };
-            let instance = lane.bind(cm_x, external_outputs);
-            let statement = ReciprocalCycleFoldAdapter::build_opening_statement_in_lane(
-                &ck, &lane, &instance, witness,
+            assert_reciprocal_opening_statement(
+                &step_circuit,
+                &lane,
+                &current_state,
+                external_outputs,
+                &mut rng,
             )?;
-            ReciprocalCycleFoldAdapter::verify_opening_statement_in_lane(&ck, &lane, &statement)?;
 
             current_state = next_state;
             current_proof = next_proof;

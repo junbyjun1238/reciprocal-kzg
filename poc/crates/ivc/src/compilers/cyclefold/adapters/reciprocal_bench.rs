@@ -3,7 +3,10 @@ use std::time::Instant;
 use ark_bn254::{Fr, G1Projective as C1};
 use ark_grumpkin::Projective as C2;
 use ark_r1cs_std::{alloc::AllocVar, fields::fp::FpVar};
-use ark_std::{rand::thread_rng, sync::Arc};
+use ark_std::{
+    rand::{RngCore, thread_rng},
+    sync::Arc,
+};
 use sonobe_fs::DeciderKey;
 use sonobe_primitives::{
     arithmetizations::{Arith, ArithConfig, r1cs::R1CS},
@@ -163,6 +166,83 @@ where
     ))
 }
 
+fn preprocess_and_generate_keys<FC>(
+    step_circuit: &FC,
+    rng: &mut impl RngCore,
+) -> ReciprocalBenchmarkResult<(
+    <ReciprocalBenchmarkIVC as IVC>::ProverKey<FC>,
+    <ReciprocalBenchmarkIVC as IVC>::VerifierKey<FC>,
+    u128,
+    u128,
+)>
+where
+    FC: FCircuit<Field = Fr, ExternalInputs = ()>,
+{
+    let preprocess_start = Instant::now();
+    let pp = ReciprocalBenchmarkIVC::preprocess(
+        (65536, 2048, Arc::new(GriffinParams::new(16, 5, 9))),
+        rng,
+    )?;
+    let preprocess_ms = preprocess_start.elapsed().as_millis();
+
+    let keygen_start = Instant::now();
+    let (pk, vk) = ReciprocalBenchmarkIVC::generate_keys(pp, step_circuit)?;
+    let keygen_ms = keygen_start.elapsed().as_millis();
+
+    Ok((pk, vk, preprocess_ms, keygen_ms))
+}
+
+fn benchmark_prove_verify_steps<FC>(
+    pk: &<ReciprocalBenchmarkIVC as IVC>::ProverKey<FC>,
+    vk: &<ReciprocalBenchmarkIVC as IVC>::VerifierKey<FC>,
+    step_circuit: &FC,
+    steps: usize,
+    rng: &mut impl RngCore,
+) -> ReciprocalBenchmarkResult<(u128, u128)>
+where
+    FC: FCircuit<Field = Fr, ExternalInputs = ()>,
+{
+    let initial_state = step_circuit.dummy_state();
+    let mut current_state = initial_state.clone();
+    let mut current_proof = <ReciprocalBenchmarkIVC as IVC>::Proof::<FC>::dummy(pk);
+
+    let mut total_prove_ms = 0_u128;
+    let mut total_verify_ms = 0_u128;
+
+    for step in 0..steps {
+        let prove_start = Instant::now();
+        let (next_state, _external_outputs, next_proof) = ReciprocalBenchmarkIVC::prove(
+            pk,
+            step_circuit,
+            step,
+            &initial_state,
+            &current_state,
+            (),
+            &current_proof,
+            &mut *rng,
+        )?;
+        total_prove_ms += prove_start.elapsed().as_millis();
+
+        let verify_start = Instant::now();
+        ReciprocalBenchmarkIVC::verify::<FC>(
+            vk,
+            step + 1,
+            &initial_state,
+            &next_state,
+            &next_proof,
+        )?;
+        total_verify_ms += verify_start.elapsed().as_millis();
+
+        current_state = next_state;
+        current_proof = next_proof;
+    }
+
+    Ok((
+        total_prove_ms / steps as u128,
+        total_verify_ms / steps as u128,
+    ))
+}
+
 pub fn benchmark_nova_nova_circuit<FC>(
     name: &'static str,
     step_circuit: &FC,
@@ -177,55 +257,13 @@ where
         extract_step_r1cs_config(step_circuit)?;
 
     let mut rng = thread_rng();
-    let preprocess_start = Instant::now();
-    let pp = ReciprocalBenchmarkIVC::preprocess(
-        (65536, 2048, Arc::new(GriffinParams::new(16, 5, 9))),
-        &mut rng,
-    )?;
-    let preprocess_ms = preprocess_start.elapsed().as_millis();
-
-    let keygen_start = Instant::now();
-    let (pk, vk) = ReciprocalBenchmarkIVC::generate_keys(pp, step_circuit)?;
-    let keygen_ms = keygen_start.elapsed().as_millis();
+    let (pk, vk, preprocess_ms, keygen_ms) = preprocess_and_generate_keys(step_circuit, &mut rng)?;
 
     let Key(dk1, dk2, _) = &pk;
     let primary_constraints = <_ as DeciderKey>::to_arith_config(dk1).n_constraints();
     let secondary_constraints = <_ as DeciderKey>::to_arith_config(dk2).n_constraints();
-
-    let initial_state = step_circuit.dummy_state();
-    let mut current_state = initial_state.clone();
-    let mut current_proof = <ReciprocalBenchmarkIVC as IVC>::Proof::<FC>::dummy(&pk);
-
-    let mut total_prove_ms = 0_u128;
-    let mut total_verify_ms = 0_u128;
-
-    for step in 0..steps {
-        let prove_start = Instant::now();
-        let (next_state, _external_outputs, next_proof) = ReciprocalBenchmarkIVC::prove(
-            &pk,
-            step_circuit,
-            step,
-            &initial_state,
-            &current_state,
-            (),
-            &current_proof,
-            &mut rng,
-        )?;
-        total_prove_ms += prove_start.elapsed().as_millis();
-
-        let verify_start = Instant::now();
-        ReciprocalBenchmarkIVC::verify::<FC>(
-            &vk,
-            step + 1,
-            &initial_state,
-            &next_state,
-            &next_proof,
-        )?;
-        total_verify_ms += verify_start.elapsed().as_millis();
-
-        current_state = next_state;
-        current_proof = next_proof;
-    }
+    let (avg_prove_ms, avg_verify_ms) =
+        benchmark_prove_verify_steps(&pk, &vk, step_circuit, steps, &mut rng)?;
 
     Ok(BenchmarkSnapshotRow {
         name,
@@ -238,8 +276,8 @@ where
         secondary_constraints,
         preprocess_ms,
         keygen_ms,
-        avg_prove_ms: total_prove_ms / steps as u128,
-        avg_verify_ms: total_verify_ms / steps as u128,
+        avg_prove_ms,
+        avg_verify_ms,
         external_output_width,
         q_len: 0,
         adapter_public_inputs: 0,

@@ -454,6 +454,37 @@ fn format_ratio(numerator: usize, denominator: usize) -> String {
     format!("{:.2}", numerator as f64 / denominator as f64)
 }
 
+fn assert_specialized_matches_direct(
+    mu_seed: [BaseField; 4],
+    expanded: &ExpandedReciprocalData,
+    leaves: &[BaseField],
+) -> State {
+    let specialized_state = specialized_engine(&expanded.mu_by_round, leaves);
+    let direct_terminal = direct_fixed_basis_engine(mu_seed, &expanded.r_by_round, leaves);
+    let reconstructed = reconstruct_terminal_value(
+        mu_seed,
+        specialized_state,
+        expanded
+            .r_by_round
+            .last()
+            .expect("terminal orbit point should exist"),
+        &expanded.delta_terminal,
+    );
+    assert_eq!(reconstructed, direct_terminal);
+    specialized_state
+}
+
+fn materialize_verified_columns(
+    expanded: &ExpandedReciprocalData,
+    leaves: &[BaseField],
+    specialized_state: State,
+) -> Vec<State> {
+    let columns = materialize_columns(&expanded.mu_by_round);
+    let row_state = evaluate_with_materialized_columns(&columns, leaves);
+    assert_eq!(row_state, specialized_state);
+    columns
+}
+
 fn benchmark_row(
     depth: usize,
     mu_seed: [BaseField; 4],
@@ -466,26 +497,11 @@ fn benchmark_row(
     let expanded = expand_data(depth, mu_seed)?;
     let expand_us = expand_start.elapsed().as_micros();
 
-    let specialized_state = specialized_engine(&expanded.mu_by_round, &leaves);
-    let direct_terminal = direct_fixed_basis_engine(mu_seed, &expanded.r_by_round, &leaves);
-    let reconstructed = reconstruct_terminal_value(
-        mu_seed,
-        specialized_state,
-        expanded
-            .r_by_round
-            .last()
-            .expect("terminal orbit point should exist"),
-        &expanded.delta_terminal,
-    );
-    assert_eq!(reconstructed, direct_terminal);
-
-    let columns = materialize_columns(&expanded.mu_by_round);
-    let row_state = evaluate_with_materialized_columns(&columns, &leaves);
-    assert_eq!(row_state, specialized_state);
+    let specialized_state = assert_specialized_matches_direct(mu_seed, &expanded, &leaves);
+    let columns = materialize_verified_columns(&expanded, &leaves, specialized_state);
 
     let eval_repeats = repeats_for_problem_size(leaf_count, 1 << 20, 8);
     let materialize_repeats = repeats_for_problem_size(leaf_count, 1 << 18, 4);
-
     let specialized_eval_us = benchmark_average_us(eval_repeats, || {
         specialized_engine(&expanded.mu_by_round, black_box(&leaves))
     });

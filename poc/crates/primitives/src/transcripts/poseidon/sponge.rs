@@ -115,10 +115,7 @@ mod tests {
         let transcript_output = transcript_sponge.get_field_elements(1);
 
         let mut direct_sponge = PoseidonSponge::<Fr>::new(&config);
-        ark_crypto_primitives::sponge::CryptographicSponge::absorb(
-            &mut direct_sponge,
-            &&input[..],
-        );
+        ark_crypto_primitives::sponge::CryptographicSponge::absorb(&mut direct_sponge, &&input[..]);
         let direct_output =
             ark_crypto_primitives::sponge::FieldBasedCryptographicSponge::squeeze_native_field_elements(
                 &mut direct_sponge,

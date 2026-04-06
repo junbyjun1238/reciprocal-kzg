@@ -88,7 +88,10 @@ pub struct CCS<F: Field, V: CCSVariant> {
 }
 
 impl<F: Field, V: CCSVariant> CCS<F, V> {
-    pub fn evaluate_at(&self, z: Assignments<F, impl AsRef<[F]> + Sync>) -> Result<Vec<F>, Error> {
+    fn validate_assignments<A: AsRef<[F]> + Sync>(
+        &self,
+        z: &Assignments<F, A>,
+    ) -> Result<(), Error> {
         let cfg = &self.cfg;
 
         let public_len = z.public.as_ref().len();
@@ -107,6 +110,13 @@ impl<F: Field, V: CCSVariant> CCS<F, V> {
                 private_len
             )));
         }
+
+        Ok(())
+    }
+
+    pub fn evaluate_at(&self, z: Assignments<F, impl AsRef<[F]> + Sync>) -> Result<Vec<F>, Error> {
+        let cfg = &self.cfg;
+        self.validate_assignments(&z)?;
 
         Ok(cfg_into_iter!(0..cfg.n_constraints())
             .map(|row| {
