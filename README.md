@@ -35,7 +35,7 @@ cargo run -p sonobe-ivc --example reciprocal_poc
 The canonical CSV artifacts are:
 
 - `benchmark/reciprocal_snapshot.csv`: an integration-level benchmark comparing the reference circuit, the naive reciprocal baseline, and the specialized reciprocal variant
-- `benchmark/reciprocal_kernel_snapshot.csv`: a scaling benchmark for the arithmetic kernel, up to depth 16, comparing the specialized reciprocal backend against direct fixed-basis and explicit-row baselines
+- `benchmark/reciprocal_kernel_snapshot.csv`: a scaling benchmark for the arithmetic kernel, up to depth 24, comparing the specialized reciprocal backend against direct fixed-basis and explicit-row baselines
 
 To reproduce the benchmark results locally after cloning:
 

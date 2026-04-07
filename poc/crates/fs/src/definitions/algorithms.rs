@@ -3,21 +3,45 @@ use sonobe_primitives::{relations::Relation, transcripts::Transcript};
 
 use super::{FoldingSchemeDef, errors::Error, keys::DeciderKey};
 
-/// Builds public parameters for a folding scheme from its external configuration.
+pub struct FoldStep<FS: FoldingSchemeDef, const M: usize, const N: usize> {
+    pub next_running_witness: FS::RW,
+    pub next_running_instance: FS::RU,
+    pub proof: FS::Proof<M, N>,
+    pub challenge: FS::Challenge,
+}
+
+impl<FS: FoldingSchemeDef, const M: usize, const N: usize> FoldStep<FS, M, N> {
+    pub fn into_parts(self) -> (FS::RW, FS::RU, FS::Proof<M, N>, FS::Challenge) {
+        (
+            self.next_running_witness,
+            self.next_running_instance,
+            self.proof,
+            self.challenge,
+        )
+    }
+}
+
 pub trait FoldingSchemePreprocessor: FoldingSchemeDef {
-    /// Produces the scheme's public parameters.
     fn preprocess(config: Self::Config, rng: impl RngCore) -> Result<Self::PublicParam, Error>;
 }
 
-/// Derives prover and verifier material from public parameters and an arithmetization.
 pub trait FoldingSchemeKeyGenerator: FoldingSchemeDef {
-    /// Generates the decider key used by subsequent proving and verification phases.
     fn generate_keys(pp: Self::PublicParam, arith: Self::Arith) -> Result<Self::DeciderKey, Error>;
 }
 
-/// Folds running and incoming states into the next running state and a proof artifact.
 pub trait FoldingSchemeProver<const M: usize, const N: usize>: FoldingSchemeDef {
-    /// Produces the next running witness and instance together with the proof and challenge.
+    fn fold(
+        proving_key: &<Self::DeciderKey as DeciderKey>::ProverKey,
+        transcript: &mut impl Transcript<Self::TranscriptField>,
+        running_witnesses: &[impl Borrow<Self::RW>; M],
+        running_instances: &[impl Borrow<Self::RU>; M],
+        incoming_witnesses: &[impl Borrow<Self::IW>; N],
+        incoming_instances: &[impl Borrow<Self::IU>; N],
+        rng: impl RngCore,
+    ) -> Result<FoldStep<Self, M, N>, Error>
+    where
+        Self: Sized;
+
     #[allow(clippy::type_complexity)]
     fn prove(
         proving_key: &<Self::DeciderKey as DeciderKey>::ProverKey,
@@ -27,12 +51,24 @@ pub trait FoldingSchemeProver<const M: usize, const N: usize>: FoldingSchemeDef 
         incoming_witnesses: &[impl Borrow<Self::IW>; N],
         incoming_instances: &[impl Borrow<Self::IU>; N],
         rng: impl RngCore,
-    ) -> Result<(Self::RW, Self::RU, Self::Proof<M, N>, Self::Challenge), Error>;
+    ) -> Result<(Self::RW, Self::RU, Self::Proof<M, N>, Self::Challenge), Error>
+    where
+        Self: Sized,
+    {
+        Self::fold(
+            proving_key,
+            transcript,
+            running_witnesses,
+            running_instances,
+            incoming_witnesses,
+            incoming_instances,
+            rng,
+        )
+        .map(|step| step.into_parts())
+    }
 }
 
-/// Recomputes the next running instance from public data and a folding proof.
 pub trait FoldingSchemeVerifier<const M: usize, const N: usize>: FoldingSchemeDef {
-    /// Verifies the folding step and returns the resulting running instance.
     fn verify(
         verifying_key: &<Self::DeciderKey as DeciderKey>::VerifierKey,
         transcript: &mut impl Transcript<Self::TranscriptField>,
@@ -42,9 +78,7 @@ pub trait FoldingSchemeVerifier<const M: usize, const N: usize>: FoldingSchemeDe
     ) -> Result<Self::RU, Error>;
 }
 
-/// Checks that witnesses and instances satisfy the relation expected by the scheme.
 pub trait FoldingSchemeDecider: FoldingSchemeDef {
-    /// Validates a running witness-instance pair.
     fn decide_running(
         decider_key: &Self::DeciderKey,
         running_witness: &Self::RW,
@@ -57,7 +91,6 @@ pub trait FoldingSchemeDecider: FoldingSchemeDef {
         )
     }
 
-    /// Validates an incoming witness-instance pair.
     fn decide_incoming(
         decider_key: &Self::DeciderKey,
         incoming_witness: &Self::IW,
@@ -73,8 +106,7 @@ pub trait FoldingSchemeDecider: FoldingSchemeDef {
 
 impl<FS: FoldingSchemeDef> FoldingSchemeDecider for FS {}
 
-/// Convenience bound for folding schemes that implement the full host-side lifecycle.
-pub trait FoldingSchemeOps<const M: usize, const N: usize>:
+pub trait FoldingScheme<const M: usize, const N: usize>:
     FoldingSchemePreprocessor
     + FoldingSchemeKeyGenerator
     + FoldingSchemeProver<M, N>
@@ -83,7 +115,7 @@ pub trait FoldingSchemeOps<const M: usize, const N: usize>:
 {
 }
 
-impl<FS, const M: usize, const N: usize> FoldingSchemeOps<M, N> for FS where
+impl<FS, const M: usize, const N: usize> FoldingScheme<M, N> for FS where
     FS: FoldingSchemePreprocessor
         + FoldingSchemeKeyGenerator
         + FoldingSchemeProver<M, N>
@@ -91,3 +123,7 @@ impl<FS, const M: usize, const N: usize> FoldingSchemeOps<M, N> for FS where
         + FoldingSchemeDecider
 {
 }
+
+pub trait FoldingSchemeOps<const M: usize, const N: usize>: FoldingScheme<M, N> {}
+
+impl<FS, const M: usize, const N: usize> FoldingSchemeOps<M, N> for FS where FS: FoldingScheme<M, N> {}

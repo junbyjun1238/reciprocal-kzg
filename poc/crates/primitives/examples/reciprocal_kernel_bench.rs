@@ -543,7 +543,7 @@ fn benchmark_row(
 fn main() -> Result<(), String> {
     let mu_seed = sample_seed_descriptor();
     let mut rng = StdRng::seed_from_u64(0xDEC0DED);
-    let depths = [2_usize, 4, 8, 10, 12, 14, 16];
+    let depths = [2_usize, 4, 8, 10, 12, 14, 16, 20, 24];
 
     println!(
         "# reciprocal kernel benchmark (release build recommended)\n# specialized physical fold vs direct fixed-basis baseline vs explicit-row materialization"

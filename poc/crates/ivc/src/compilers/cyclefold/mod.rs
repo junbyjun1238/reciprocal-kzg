@@ -12,7 +12,7 @@ use sha3::{
     digest::{ExtendableOutput, Update},
 };
 use sonobe_fs::{
-    DeciderKey, FoldingInstance, FoldingSchemeDef, FoldingSchemeDefGadget,
+    DeciderKey, FoldStep, FoldingInstance, FoldingSchemeDef, FoldingSchemeDefGadget,
     FoldingSchemeFullVerifierGadget, FoldingSchemePartialVerifierGadget,
     GroupBasedFoldingSchemePrimary, GroupBasedFoldingSchemeSecondary,
 };
@@ -238,7 +238,12 @@ where
                 &cyclefold_instance
             };
 
-            let (next_cyclefold_witness, next_cyclefold_instance, cyclefold_proof, _) = FS2::prove(
+            let FoldStep {
+                next_running_witness: next_cyclefold_witness,
+                next_running_instance: next_cyclefold_instance,
+                proof: cyclefold_proof,
+                challenge: _challenge,
+            } = FS2::fold(
                 dk2.to_pk(),
                 transcript,
                 &[previous_cyclefold_witness],
@@ -286,7 +291,12 @@ where
             cyclefold_running_instance,
         ) = current_proof;
 
-        let (primary_witness, primary_instance, primary_proof, challenge) = FS1::prove(
+        let FoldStep {
+            next_running_witness: primary_witness,
+            next_running_instance: primary_instance,
+            proof: primary_proof,
+            challenge,
+        } = FS1::fold(
             dk1.to_pk(),
             transcript,
             &[running_witness],

@@ -6,8 +6,8 @@ pub mod nova;
 pub use self::definitions::{
     FoldingSchemeDef, FoldingSchemeDefGadget,
     algorithms::{
-        FoldingSchemeDecider, FoldingSchemeKeyGenerator, FoldingSchemeOps,
-        FoldingSchemePreprocessor, FoldingSchemeProver, FoldingSchemeVerifier,
+        FoldStep, FoldingScheme, FoldingSchemeDecider, FoldingSchemeKeyGenerator,
+        FoldingSchemeOps, FoldingSchemePreprocessor, FoldingSchemeProver, FoldingSchemeVerifier,
     },
     circuits::{FoldingSchemeFullVerifierGadget, FoldingSchemePartialVerifierGadget},
     errors::Error,
@@ -91,7 +91,7 @@ mod tests {
     }
 
     #[allow(non_snake_case)]
-    pub fn test_folding_scheme<FS: FoldingSchemeOps<M, N>, const M: usize, const N: usize>(
+    pub fn test_folding_scheme<FS: FoldingScheme<M, N>, const M: usize, const N: usize>(
         config: FS::Config,
         circuit: impl ConstraintSynthesizer<<FS::CM as CommitmentDef>::Scalar>,
         assignments_vec: Vec<AssignmentsOwned<<FS::CM as CommitmentDef>::Scalar>>,
@@ -119,15 +119,71 @@ mod tests {
         for assignments in assignments_vec {
             let (ws, us) = sample_incoming_pool::<FS, N>(&dk, assignments, &mut rng)?;
 
-            let (WW, UU, pi, _) = FS::prove(pk, &mut transcript_p, &Ws, &Us, &ws, &us, &mut rng)?;
-            FS::decide_running(&dk, &WW, &UU)?;
-            assert_eq!(FS::verify(vk, &mut transcript_v, &Us, &us, &pi)?, UU);
+            let FoldStep {
+                next_running_witness,
+                next_running_instance,
+                proof,
+                challenge: _challenge,
+            } = FS::fold(pk, &mut transcript_p, &Ws, &Us, &ws, &us, &mut rng)?;
+            FS::decide_running(&dk, &next_running_witness, &next_running_instance)?;
+            assert_eq!(
+                FS::verify(vk, &mut transcript_v, &Us, &us, &proof)?,
+                next_running_instance,
+            );
 
             resample_running_pool::<FS, M>(&dk, &mut Ws, &mut Us, &mut rng)?;
             if M != 0 {
                 let idx = rng.gen_range(0..M);
-                Ws[idx] = WW;
-                Us[idx] = UU;
+                Ws[idx] = next_running_witness;
+                Us[idx] = next_running_instance;
+            }
+        }
+
+        Ok(())
+    }
+
+    #[allow(non_snake_case)]
+    pub fn test_folding_scheme_legacy_prove<FS: FoldingScheme<M, N>, const M: usize, const N: usize>(
+        config: FS::Config,
+        circuit: impl ConstraintSynthesizer<<FS::CM as CommitmentDef>::Scalar>,
+        assignments_vec: Vec<AssignmentsOwned<<FS::CM as CommitmentDef>::Scalar>>,
+        mut rng: impl Rng,
+    ) -> Result<(), Box<dyn Error>>
+    where
+        FS::Arith: From<ConstraintSystem<<FS::CM as CommitmentDef>::Scalar>>,
+    {
+        let pp = FS::preprocess(config, &mut rng)?;
+
+        let cs = ArithExtractor::new();
+        cs.execute_synthesizer(circuit)?;
+        let arith = cs.into_arith()?;
+        let dk = FS::generate_keys(pp, arith)?;
+        let pk = dk.to_pk();
+        let vk = dk.to_vk();
+
+        let (mut Ws, mut Us) = sample_running_pool::<FS, M>(&dk, &mut rng)?;
+
+        let config = Arc::new(GriffinParams::new(16, 5, 9));
+
+        let mut transcript_p = GriffinSponge::new(&config);
+        let mut transcript_v = GriffinSponge::new(&config);
+
+        for assignments in assignments_vec {
+            let (ws, us) = sample_incoming_pool::<FS, N>(&dk, assignments, &mut rng)?;
+
+            let (next_running_witness, next_running_instance, proof, _challenge) =
+                FS::prove(pk, &mut transcript_p, &Ws, &Us, &ws, &us, &mut rng)?;
+            FS::decide_running(&dk, &next_running_witness, &next_running_instance)?;
+            assert_eq!(
+                FS::verify(vk, &mut transcript_v, &Us, &us, &proof)?,
+                next_running_instance,
+            );
+
+            resample_running_pool::<FS, M>(&dk, &mut Ws, &mut Us, &mut rng)?;
+            if M != 0 {
+                let idx = rng.gen_range(0..M);
+                Ws[idx] = next_running_witness;
+                Us[idx] = next_running_instance;
             }
         }
 

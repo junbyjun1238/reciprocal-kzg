@@ -100,7 +100,7 @@ mod tests {
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
     use super::*;
-    use crate::tests::test_folding_scheme;
+    use crate::tests::{test_folding_scheme, test_folding_scheme_legacy_prove};
 
     fn run_nova_configs<TF: SonobeField>(
         rounds: usize,
@@ -140,6 +140,50 @@ mod tests {
         )?;
 
         test_folding_scheme::<AbstractNova<Pedersen<G1Projective, false>, TF>, 2, 0>(
+            8,
+            CircuitForTest {
+                x: Fr::rand(&mut rng),
+            },
+            (0..rounds)
+                .map(|_| satisfying_assignments_for_test(Fr::rand(&mut rng)))
+                .collect(),
+            &mut rng,
+        )?;
+
+        test_folding_scheme_legacy_prove::<AbstractNova<Pedersen<G1Projective, true>, TF>, 1, 1>(
+            8,
+            CircuitForTest {
+                x: Fr::rand(&mut rng),
+            },
+            (0..rounds)
+                .map(|_| satisfying_assignments_for_test(Fr::rand(&mut rng)))
+                .collect(),
+            &mut rng,
+        )?;
+
+        test_folding_scheme_legacy_prove::<AbstractNova<Pedersen<G1Projective, false>, TF>, 1, 1>(
+            8,
+            CircuitForTest {
+                x: Fr::rand(&mut rng),
+            },
+            (0..rounds)
+                .map(|_| satisfying_assignments_for_test(Fr::rand(&mut rng)))
+                .collect(),
+            &mut rng,
+        )?;
+
+        test_folding_scheme_legacy_prove::<AbstractNova<Pedersen<G1Projective, true>, TF>, 2, 0>(
+            8,
+            CircuitForTest {
+                x: Fr::rand(&mut rng),
+            },
+            (0..rounds)
+                .map(|_| satisfying_assignments_for_test(Fr::rand(&mut rng)))
+                .collect(),
+            &mut rng,
+        )?;
+
+        test_folding_scheme_legacy_prove::<AbstractNova<Pedersen<G1Projective, false>, TF>, 2, 0>(
             8,
             CircuitForTest {
                 x: Fr::rand(&mut rng),

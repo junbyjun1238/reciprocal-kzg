@@ -12,7 +12,7 @@ use sonobe_primitives::{
 };
 
 use crate::{
-    Error, FoldingSchemeProver,
+    Error, FoldStep, FoldingSchemeProver,
     nova::{AbstractNova, NovaKey},
 };
 
@@ -47,7 +47,7 @@ impl<CM: GroupBasedCommitment, TF: SonobeField, const B: usize> FoldingSchemePro
     for AbstractNova<CM, TF, B>
 {
     #[allow(non_snake_case)]
-    fn prove(
+    fn fold(
         pk: &NovaKey<Self::Arith, CM>,
         transcript: &mut impl Transcript<TF>,
         Ws: &[impl Borrow<Self::RW>; 1],
@@ -55,7 +55,7 @@ impl<CM: GroupBasedCommitment, TF: SonobeField, const B: usize> FoldingSchemePro
         ws: &[impl Borrow<Self::IW>; 1],
         us: &[impl Borrow<Self::IU>; 1],
         rng: impl RngCore,
-    ) -> Result<(Self::RW, Self::RU, Self::Proof<1, 1>, Self::Challenge), Error> {
+    ) -> Result<FoldStep<Self, 1, 1>, Error> {
         let (W, U) = (Ws[0].borrow(), Us[0].borrow());
         let (w, u) = (ws[0].borrow(), us[0].borrow());
 
@@ -79,7 +79,12 @@ impl<CM: GroupBasedCommitment, TF: SonobeField, const B: usize> FoldingSchemePro
             cm_w: U.cm_w + u.cm_w.mul(rho),
             x: cfg_iter!(U.x).zip(&u.x).map(|(a, b)| rho * b + a).collect(),
         };
-        Ok((WW, UU, cm_t, rho_bits.try_into().unwrap()))
+        Ok(FoldStep {
+            next_running_witness: WW,
+            next_running_instance: UU,
+            proof: cm_t,
+            challenge: rho_bits.try_into().unwrap(),
+        })
     }
 }
 
@@ -87,7 +92,7 @@ impl<CM: GroupBasedCommitment, TF: SonobeField, const B: usize> FoldingSchemePro
     for AbstractNova<CM, TF, B>
 {
     #[allow(non_snake_case)]
-    fn prove(
+    fn fold(
         pk: &NovaKey<Self::Arith, CM>,
         transcript: &mut impl Transcript<TF>,
         [W1, W2]: &[impl Borrow<Self::RW>; 2],
@@ -95,7 +100,7 @@ impl<CM: GroupBasedCommitment, TF: SonobeField, const B: usize> FoldingSchemePro
         _: &[impl Borrow<Self::IW>; 0],
         _: &[impl Borrow<Self::IU>; 0],
         rng: impl RngCore,
-    ) -> Result<(Self::RW, Self::RU, Self::Proof<2, 0>, Self::Challenge), Error> {
+    ) -> Result<FoldStep<Self, 2, 0>, Error> {
         let (W1, U1) = (W1.borrow(), U1.borrow());
         let (W2, U2) = (W2.borrow(), U2.borrow());
 
@@ -131,6 +136,11 @@ impl<CM: GroupBasedCommitment, TF: SonobeField, const B: usize> FoldingSchemePro
                 .map(|(a, b)| rho * b + a)
                 .collect(),
         };
-        Ok((WW, UU, cm_t, rho_bits.try_into().unwrap()))
+        Ok(FoldStep {
+            next_running_witness: WW,
+            next_running_instance: UU,
+            proof: cm_t,
+            challenge: rho_bits.try_into().unwrap(),
+        })
     }
 }

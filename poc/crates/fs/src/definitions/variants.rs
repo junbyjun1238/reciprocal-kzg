@@ -4,7 +4,7 @@ use sonobe_primitives::{
 };
 
 use crate::{
-    FoldingSchemeDef, FoldingSchemeDefGadget, FoldingSchemeFullVerifierGadget, FoldingSchemeOps,
+    FoldingScheme, FoldingSchemeDef, FoldingSchemeDefGadget, FoldingSchemeFullVerifierGadget,
     FoldingSchemePartialVerifierGadget,
 };
 
@@ -19,12 +19,13 @@ pub trait GroupBasedFoldingSchemePrimaryDef:
 
 pub trait GroupBasedFoldingSchemePrimary<const M: usize, const N: usize>:
     GroupBasedFoldingSchemePrimaryDef<Gadget: FoldingSchemePartialVerifierGadget<M, N>>
-    + FoldingSchemeOps<M, N>
+    + FoldingScheme<M, N>
 {
 }
 
 impl<FS, const M: usize, const N: usize> GroupBasedFoldingSchemePrimary<M, N> for FS where
     FS: GroupBasedFoldingSchemePrimaryDef<Gadget: FoldingSchemePartialVerifierGadget<M, N>>
+        + FoldingScheme<M, N>
 {
 }
 
@@ -39,11 +40,12 @@ pub trait GroupBasedFoldingSchemeSecondaryDef:
 
 pub trait GroupBasedFoldingSchemeSecondary<const M: usize, const N: usize>:
     GroupBasedFoldingSchemeSecondaryDef<Gadget: FoldingSchemeFullVerifierGadget<M, N>>
-    + FoldingSchemeOps<M, N>
+    + FoldingScheme<M, N>
 {
 }
 
 impl<FS, const M: usize, const N: usize> GroupBasedFoldingSchemeSecondary<M, N> for FS where
     FS: GroupBasedFoldingSchemeSecondaryDef<Gadget: FoldingSchemeFullVerifierGadget<M, N>>
+        + FoldingScheme<M, N>
 {
 }
