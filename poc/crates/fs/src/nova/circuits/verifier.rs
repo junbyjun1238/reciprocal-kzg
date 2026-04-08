@@ -7,7 +7,7 @@ use sonobe_primitives::{
 };
 
 use crate::{
-    FoldingSchemeFullVerifierGadget, FoldingSchemePartialVerifierGadget,
+    FoldingSchemeFullVerifierGadget, FoldingSchemePartialVerifierGadget, PartialVerifierStep,
     nova::AbstractNovaGadget,
     nova::instances::circuits::{IncomingInstanceVar as IUVar, RunningInstanceVar as RUVar},
 };
@@ -151,17 +151,21 @@ impl<CM, const B: usize> FoldingSchemePartialVerifierGadget<1, 1> for AbstractNo
 where
     CM: CommitmentDefGadget<Widget: GroupBasedCommitment>,
 {
-    #[allow(non_snake_case)]
-    fn verify_hinted(
-        _vk: &Self::VerifierKey,
+    fn verify_partial(
+        _verifying_key: &Self::VerifierKey,
         transcript: &mut impl TranscriptGadget<CM::ConstraintField>,
-        [U]: [&Self::RU; 1],
-        [u]: [&Self::IU; 1],
+        [running]: [&Self::RU; 1],
+        [incoming]: [&Self::IU; 1],
         proof: &Self::Proof<1, 1>,
-    ) -> Result<(Self::RU, Self::Challenge), SynthesisError> {
-        let (rho_bits, rho) = squeeze_running_incoming_challenge::<CM, B>(transcript, U, u, proof)?;
-        let UU = fold_running_incoming_with_hint(U, u, proof, &rho)?;
-        Ok((UU, rho_bits.try_into().unwrap()))
+    ) -> Result<PartialVerifierStep<Self::RU, Self::Challenge>, SynthesisError> {
+        let (rho_bits, rho) =
+            squeeze_running_incoming_challenge::<CM, B>(transcript, running, incoming, proof)?;
+        let next_running_instance =
+            fold_running_incoming_with_hint(running, incoming, proof, &rho)?;
+        Ok(PartialVerifierStep {
+            next_running_instance,
+            challenge: rho_bits.try_into().unwrap(),
+        })
     }
 }
 
@@ -169,17 +173,25 @@ impl<CM, const B: usize> FoldingSchemePartialVerifierGadget<2, 0> for AbstractNo
 where
     CM: CommitmentDefGadget<Widget: GroupBasedCommitment>,
 {
-    #[allow(non_snake_case)]
-    fn verify_hinted(
-        _vk: &Self::VerifierKey,
+    fn verify_partial(
+        _verifying_key: &Self::VerifierKey,
         transcript: &mut impl TranscriptGadget<CM::ConstraintField>,
-        [U1, U2]: [&Self::RU; 2],
+        [first_running, second_running]: [&Self::RU; 2],
         _: [&Self::IU; 0],
         proof: &Self::Proof<2, 0>,
-    ) -> Result<(Self::RU, Self::Challenge), SynthesisError> {
-        let (rho_bits, rho) = squeeze_two_running_challenge::<CM, B>(transcript, U1, U2, proof)?;
-        let UU = fold_two_running_with_hint(U1, U2, proof, &rho)?;
-        Ok((UU, rho_bits.try_into().unwrap()))
+    ) -> Result<PartialVerifierStep<Self::RU, Self::Challenge>, SynthesisError> {
+        let (rho_bits, rho) = squeeze_two_running_challenge::<CM, B>(
+            transcript,
+            first_running,
+            second_running,
+            proof,
+        )?;
+        let next_running_instance =
+            fold_two_running_with_hint(first_running, second_running, proof, &rho)?;
+        Ok(PartialVerifierStep {
+            next_running_instance,
+            challenge: rho_bits.try_into().unwrap(),
+        })
     }
 }
 
@@ -188,26 +200,30 @@ where
     CM: CommitmentDefGadget<Widget: GroupBasedCommitment>,
     CM::CommitmentVar: CurveVar<<CM::Widget as CommitmentDef>::Commitment, CM::ConstraintField>,
 {
-    #[allow(non_snake_case)]
     fn verify(
-        _vk: &Self::VerifierKey,
+        _verifying_key: &Self::VerifierKey,
         transcript: &mut impl TranscriptGadget<CM::ConstraintField>,
-        [U]: [&Self::RU; 1],
-        [u]: [&Self::IU; 1],
+        [running]: [&Self::RU; 1],
+        [incoming]: [&Self::IU; 1],
         proof: &Self::Proof<1, 1>,
     ) -> Result<Self::RU, SynthesisError> {
-        let rho_bits = transcript.add(&U)?.add(&u)?.add(proof)?.challenge_bits(B)?;
+        let rho_bits = transcript
+            .add(&running)?
+            .add(&incoming)?
+            .add(proof)?
+            .challenge_bits(B)?;
         let rho = CM::ScalarVar::from_bits_le(&rho_bits)?;
 
         Ok(Self::RU {
-            u: (U.u.clone() + &rho)
+            u: (running.u.clone() + &rho)
                 .try_into()
                 .map_err(|_| SynthesisError::Unsatisfiable)?,
-            cm_e: proof.scalar_mul_le(rho_bits.iter())? + &U.cm_e,
-            cm_w: u.cm_w.scalar_mul_le(rho_bits.iter())? + &U.cm_w,
-            x: U.x
+            cm_e: proof.scalar_mul_le(rho_bits.iter())? + &running.cm_e,
+            cm_w: incoming.cm_w.scalar_mul_le(rho_bits.iter())? + &running.cm_w,
+            x: running
+                .x
                 .iter()
-                .zip(&u.x)
+                .zip(&incoming.x)
                 .map(|(a, b)| (b.clone() * &rho + a).try_into())
                 .collect::<Result<_, _>>()
                 .map_err(|_| SynthesisError::Unsatisfiable)?,

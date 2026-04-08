@@ -8,7 +8,7 @@ use ark_r1cs_std::{
 use ark_relations::gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use sonobe_fs::{
     FoldingInstanceVar, FoldingSchemeFullVerifierGadget, FoldingSchemePartialVerifierGadget,
-    GroupBasedFoldingSchemePrimary, GroupBasedFoldingSchemeSecondary,
+    GroupBasedFoldingSchemePrimary, GroupBasedFoldingSchemeSecondary, PartialVerifierStep,
 };
 use sonobe_primitives::{
     arithmetizations::Arith,
@@ -229,8 +229,10 @@ where
             .add(&inputs.cyclefold_running)?
             .get_field_element()?;
         let incoming = FoldingInstanceVar::new_witness_with_public_inputs(cs, u, vec![u_x])?;
-        let (uu, rho) =
-            FS1::Gadget::verify_hinted(&(), transcript, [&inputs.running], [&incoming], proof)?;
+        let PartialVerifierStep {
+            next_running_instance: uu,
+            challenge: rho,
+        } = FS1::Gadget::verify_partial(&(), transcript, [&inputs.running], [&incoming], proof)?;
         let actual_uu = inputs.is_basecase.select(&inputs.running_dummy, &uu)?;
         Ok((incoming, uu, actual_uu, rho))
     }

@@ -9,7 +9,10 @@ pub use self::definitions::{
         FoldStep, FoldingScheme, FoldingSchemeDecider, FoldingSchemeKeyGenerator,
         FoldingSchemeOps, FoldingSchemePreprocessor, FoldingSchemeProver, FoldingSchemeVerifier,
     },
-    circuits::{FoldingSchemeFullVerifierGadget, FoldingSchemePartialVerifierGadget},
+    circuits::{
+        FoldingSchemeFullVerifierGadget, FoldingSchemePartialVerifierGadget,
+        PartialVerifierStep,
+    },
     errors::Error,
     instances::{FoldingInstance, FoldingInstanceVar, PlainInstance, PlainInstanceVar},
     keys::DeciderKey,
