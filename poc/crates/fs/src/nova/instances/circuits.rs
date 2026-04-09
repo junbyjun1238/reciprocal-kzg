@@ -101,21 +101,21 @@ impl<CM: CommitmentDefGadget> FoldingInstanceVar<CM> for RunningInstanceVar<CM> 
         vec![&self.cm_w, &self.cm_e]
     }
 
-    fn public_inputs(&self) -> &Vec<CM::ScalarVar> {
+    fn public_inputs(&self) -> &[CM::ScalarVar] {
         &self.x
     }
 
     fn new_witness_with_public_inputs(
         cs: impl Into<Namespace<CM::ConstraintField>>,
-        u: &Self::Value,
-        x: Vec<CM::ScalarVar>,
+        instance: &Self::Value,
+        public_inputs: Vec<CM::ScalarVar>,
     ) -> Result<Self, SynthesisError> {
         let cs = cs.into().cs();
         Ok(Self {
-            cm_e: AllocVar::new_witness(cs.clone(), || Ok(&u.cm_e))?,
-            u: AllocVar::new_witness(cs.clone(), || Ok(&u.u))?,
-            cm_w: AllocVar::new_witness(cs.clone(), || Ok(&u.cm_w))?,
-            x,
+            cm_e: AllocVar::new_witness(cs.clone(), || Ok(&instance.cm_e))?,
+            u: AllocVar::new_witness(cs.clone(), || Ok(&instance.u))?,
+            cm_w: AllocVar::new_witness(cs.clone(), || Ok(&instance.cm_w))?,
+            x: public_inputs,
         })
     }
 }
@@ -195,19 +195,19 @@ impl<CM: CommitmentDefGadget> FoldingInstanceVar<CM> for IncomingInstanceVar<CM>
         vec![&self.cm_w]
     }
 
-    fn public_inputs(&self) -> &Vec<CM::ScalarVar> {
+    fn public_inputs(&self) -> &[CM::ScalarVar] {
         &self.x
     }
 
     fn new_witness_with_public_inputs(
         cs: impl Into<Namespace<CM::ConstraintField>>,
-        u: &Self::Value,
-        x: Vec<CM::ScalarVar>,
+        instance: &Self::Value,
+        public_inputs: Vec<CM::ScalarVar>,
     ) -> Result<Self, SynthesisError> {
         let cs = cs.into().cs();
         Ok(Self {
-            cm_w: AllocVar::new_witness(cs.clone(), || Ok(&u.cm_w))?,
-            x,
+            cm_w: AllocVar::new_witness(cs.clone(), || Ok(&instance.cm_w))?,
+            x: public_inputs,
         })
     }
 }
