@@ -86,8 +86,8 @@ pub struct Proof<FS1: FoldingSchemeDef, FS2: FoldingSchemeDef>(
 
 impl<FS1: FoldingSchemeDef, FS2: FoldingSchemeDef, T> Dummy<&Key<FS1, FS2, T>> for Proof<FS1, FS2> {
     fn dummy(pk: &Key<FS1, FS2, T>) -> Self {
-        let cfg1 = pk.0.to_arith_config();
-        let cfg2 = pk.1.to_arith_config();
+        let cfg1 = pk.0.arith_config();
+        let cfg2 = pk.1.arith_config();
         Self(
             FS1::RW::dummy(cfg1),
             FS1::RU::dummy(cfg1),
@@ -244,7 +244,7 @@ where
                 proof: cyclefold_proof,
                 challenge: _challenge,
             } = FS2::fold(
-                dk2.to_pk(),
+                dk2.prover_key(),
                 transcript,
                 &[previous_cyclefold_witness],
                 &[previous_cyclefold_instance],
@@ -297,7 +297,7 @@ where
             proof: primary_proof,
             challenge,
         } = FS1::fold(
-            dk1.to_pk(),
+            dk1.prover_key(),
             transcript,
             &[running_witness],
             &[running_instance],
@@ -411,8 +411,8 @@ where
         let hash = T::new_with_public_parameter_hash(hash_config, *pp_hash);
         let mut transcript = hash.separate_domain("transcript".as_ref());
 
-        let arith1_config = dk1.to_arith_config();
-        let arith2_config = dk2.to_arith_config();
+        let arith1_config = dk1.arith_config();
+        let arith2_config = dk2.arith_config();
         let FoldArtifacts {
             primary_witness,
             primary_instance,

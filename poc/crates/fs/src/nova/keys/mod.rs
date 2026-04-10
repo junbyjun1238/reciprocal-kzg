@@ -27,15 +27,15 @@ impl<A: Arith, CM: CommitmentDef> DeciderKey for NovaKey<A, CM> {
     type VerifierKey = ();
     type ArithConfig = A::Config;
 
-    fn to_pk(&self) -> &Self::ProverKey {
+    fn prover_key(&self) -> &Self::ProverKey {
         self
     }
 
-    fn to_vk(&self) -> &Self::VerifierKey {
+    fn verifier_key(&self) -> &Self::VerifierKey {
         &()
     }
 
-    fn to_arith_config(&self) -> &Self::ArithConfig {
+    fn arith_config(&self) -> &Self::ArithConfig {
         self.arith.config()
     }
 }

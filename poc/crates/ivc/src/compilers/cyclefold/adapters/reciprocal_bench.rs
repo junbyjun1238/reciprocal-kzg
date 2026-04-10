@@ -260,8 +260,8 @@ where
     let (pk, vk, preprocess_ms, keygen_ms) = preprocess_and_generate_keys(step_circuit, &mut rng)?;
 
     let Key(dk1, dk2, _) = &pk;
-    let primary_constraints = <_ as DeciderKey>::to_arith_config(dk1).n_constraints();
-    let secondary_constraints = <_ as DeciderKey>::to_arith_config(dk2).n_constraints();
+    let primary_constraints = <_ as DeciderKey>::arith_config(dk1).n_constraints();
+    let secondary_constraints = <_ as DeciderKey>::arith_config(dk2).n_constraints();
     let (avg_prove_ms, avg_verify_ms) =
         benchmark_prove_verify_steps(&pk, &vk, step_circuit, steps, &mut rng)?;
 

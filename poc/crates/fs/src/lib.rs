@@ -109,8 +109,8 @@ mod tests {
         cs.execute_synthesizer(circuit)?;
         let arith = cs.into_arith()?;
         let dk = FS::generate_keys(pp, arith)?;
-        let pk = dk.to_pk();
-        let vk = dk.to_vk();
+        let pk = dk.prover_key();
+        let vk = dk.verifier_key();
 
         let (mut Ws, mut Us) = sample_running_pool::<FS, M>(&dk, &mut rng)?;
 
@@ -161,8 +161,8 @@ mod tests {
         cs.execute_synthesizer(circuit)?;
         let arith = cs.into_arith()?;
         let dk = FS::generate_keys(pp, arith)?;
-        let pk = dk.to_pk();
-        let vk = dk.to_vk();
+        let pk = dk.prover_key();
+        let vk = dk.verifier_key();
 
         let (mut Ws, mut Us) = sample_running_pool::<FS, M>(&dk, &mut rng)?;
 
