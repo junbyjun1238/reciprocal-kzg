@@ -62,7 +62,7 @@ impl<CM, const CHALLENGE_BITS: usize> FoldingSchemeDefGadget
 where
     CM: CommitmentDefGadget<Widget: GroupBasedCommitment>,
 {
-    type Widget = AbstractNova<CM::Widget, CM::ConstraintField, CHALLENGE_BITS>;
+    type Scheme = AbstractNova<CM::Widget, CM::ConstraintField, CHALLENGE_BITS>;
 
     type CM = CM;
     type RU = RUVar<CM>;

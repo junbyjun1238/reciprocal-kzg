@@ -14,7 +14,7 @@ pub trait GroupBasedFoldingSchemePrimaryDef:
         TranscriptField = <<Self as FoldingSchemeDef>::CM as CommitmentDef>::Scalar,
     >
 {
-    type Gadget: FoldingSchemeDefGadget<Widget = Self, CM = <Self::CM as GroupBasedCommitment>::Gadget2>;
+    type Gadget: FoldingSchemeDefGadget<Scheme = Self, CM = <Self::CM as GroupBasedCommitment>::Gadget2>;
 }
 
 pub trait GroupBasedFoldingSchemePrimary<const M: usize, const N: usize>:
@@ -35,7 +35,7 @@ pub trait GroupBasedFoldingSchemeSecondaryDef:
         TranscriptField = CF2<<<Self as FoldingSchemeDef>::CM as CommitmentDef>::Commitment>,
     >
 {
-    type Gadget: FoldingSchemeDefGadget<Widget = Self, CM = <Self::CM as GroupBasedCommitment>::Gadget1>;
+    type Gadget: FoldingSchemeDefGadget<Scheme = Self, CM = <Self::CM as GroupBasedCommitment>::Gadget1>;
 }
 
 pub trait GroupBasedFoldingSchemeSecondary<const M: usize, const N: usize>:
