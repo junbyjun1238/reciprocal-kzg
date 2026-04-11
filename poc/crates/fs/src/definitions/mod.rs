@@ -3,7 +3,6 @@ pub mod circuits;
 pub mod errors;
 pub mod instances;
 pub mod keys;
-pub mod utils;
 pub mod variants;
 pub mod witnesses;
 

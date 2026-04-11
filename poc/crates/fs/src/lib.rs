@@ -16,7 +16,6 @@ pub use self::definitions::{
     errors::Error,
     instances::{FoldingInstance, FoldingInstanceVar, PlainInstance, PlainInstanceVar},
     keys::DeciderKey,
-    utils::TaggedVec,
     variants::{
         GroupBasedFoldingSchemePrimary, GroupBasedFoldingSchemePrimaryDef,
         GroupBasedFoldingSchemeSecondary, GroupBasedFoldingSchemeSecondaryDef,
