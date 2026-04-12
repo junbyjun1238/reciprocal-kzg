@@ -75,13 +75,13 @@ where
 impl<CM: GroupBasedCommitment, const CHALLENGE_BITS: usize> GroupBasedFoldingSchemePrimaryDef
     for AbstractNova<CM, CM::Scalar, CHALLENGE_BITS>
 {
-    type Gadget = AbstractNovaGadget<CM::Gadget2, CHALLENGE_BITS>;
+    type Verifier = AbstractNovaGadget<CM::Gadget2, CHALLENGE_BITS>;
 }
 
 impl<CM: GroupBasedCommitment, const CHALLENGE_BITS: usize> GroupBasedFoldingSchemeSecondaryDef
     for AbstractNova<CM, CF2<CM::Commitment>, CHALLENGE_BITS>
 {
-    type Gadget = AbstractNovaGadget<CM::Gadget1, CHALLENGE_BITS>;
+    type Verifier = AbstractNovaGadget<CM::Gadget1, CHALLENGE_BITS>;
 }
 
 #[cfg(test)]

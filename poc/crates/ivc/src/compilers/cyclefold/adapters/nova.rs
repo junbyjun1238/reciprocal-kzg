@@ -1,12 +1,12 @@
 use ark_ff::{PrimeField, Zero};
 use ark_r1cs_std::{
-    GR1CSVar, alloc::AllocVar, fields::fp::FpVar, groups::CurveVar, prelude::Boolean,
+    alloc::AllocVar, fields::fp::FpVar, groups::CurveVar, prelude::Boolean, GR1CSVar,
 };
 use ark_relations::gr1cs::{ConstraintSystemRef, SynthesisError};
 use ark_std::{borrow::Borrow, iter::once};
 use sonobe_fs::{
-    FoldingSchemeDefGadget,
     nova::{CycleFoldNova, Nova},
+    FoldingSchemeDefGadget,
 };
 use sonobe_primitives::{
     algebra::{
@@ -16,11 +16,11 @@ use sonobe_primitives::{
     },
     circuits::WitnessToPublic,
     commitments::GroupBasedCommitment,
-    traits::{CF2, SonobeCurve},
+    traits::{SonobeCurve, CF2},
 };
 
 use crate::compilers::cyclefold::{
-    CycleFoldBasedIVC, FoldingSchemeCycleFoldExt, circuits::CycleFoldCircuit,
+    circuits::CycleFoldCircuit, CycleFoldBasedIVC, FoldingSchemeCycleFoldExt,
 };
 
 pub struct NovaCycleFoldCircuit<C, const CHALLENGE_BITS: usize> {
@@ -62,53 +62,60 @@ impl<CM: GroupBasedCommitment, const CHALLENGE_BITS: usize> FoldingSchemeCycleFo
 
     #[allow(non_snake_case)]
     fn to_cyclefold_circuits(
-        [U]: &[impl Borrow<Self::RU>; 1],
-        [u]: &[impl Borrow<Self::IU>; 1],
+        [running_instance]: &[impl Borrow<Self::RU>; 1],
+        [incoming_instance]: &[impl Borrow<Self::IU>; 1],
         proof: &Self::Proof<1, 1>,
-        rho: Self::Challenge,
+        challenge: Self::Challenge,
     ) -> Vec<Self::CFCircuit> {
         vec![
             NovaCycleFoldCircuit {
-                r: rho.into(),
-                points: vec![U.borrow().cm_e, *proof],
+                r: challenge.into(),
+                points: vec![running_instance.borrow().cm_e, *proof],
             },
             NovaCycleFoldCircuit {
-                r: rho.into(),
-                points: vec![U.borrow().cm_w, u.borrow().cm_w],
+                r: challenge.into(),
+                points: vec![
+                    running_instance.borrow().cm_w,
+                    incoming_instance.borrow().cm_w,
+                ],
             },
         ]
     }
 
     #[allow(non_snake_case)]
     fn to_cyclefold_inputs(
-        [U]: [<Self::Gadget as FoldingSchemeDefGadget>::RU; 1],
-        [u]: [<Self::Gadget as FoldingSchemeDefGadget>::IU; 1],
-        UU: <Self::Gadget as FoldingSchemeDefGadget>::RU,
-        proof: <Self::Gadget as FoldingSchemeDefGadget>::Proof<1, 1>,
-        rho: <Self::Gadget as FoldingSchemeDefGadget>::Challenge,
+        [running_instance]: [<Self::Verifier as FoldingSchemeDefGadget>::RU; 1],
+        [incoming_instance]: [<Self::Verifier as FoldingSchemeDefGadget>::IU; 1],
+        next_running_instance: <Self::Verifier as FoldingSchemeDefGadget>::RU,
+        proof: <Self::Verifier as FoldingSchemeDefGadget>::Proof<1, 1>,
+        challenge: <Self::Verifier as FoldingSchemeDefGadget>::Challenge,
     ) -> Result<Vec<Vec<EmulatedFieldVar<CM::Scalar, CF2<CM::Commitment>>>>, SynthesisError> {
-        let mut rho = rho.to_vec();
-        rho.resize(
+        let mut challenge_bits = challenge.to_vec();
+        challenge_bits.resize(
             CF2::<CM::Commitment>::MODULUS_BIT_SIZE as usize,
             Boolean::FALSE,
         );
-        let rho = EmulatedFieldVar::from_bounded_bits_le(
-            &rho,
+        let challenge = EmulatedFieldVar::from_bounded_bits_le(
+            &challenge_bits,
             Bounds(Zero::zero(), CF2::<CM::Commitment>::MODULUS.into().into()),
         )?;
         Ok(vec![
-            once(rho.clone())
+            once(challenge.clone())
                 .chain(
-                    [U.cm_e, proof, UU.cm_e]
+                    [running_instance.cm_e, proof, next_running_instance.cm_e]
                         .into_iter()
                         .flat_map(|p| [p.x, p.y]),
                 )
                 .collect(),
-            once(rho)
+            once(challenge)
                 .chain(
-                    [U.cm_w, u.cm_w, UU.cm_w]
-                        .into_iter()
-                        .flat_map(|p| [p.x, p.y]),
+                    [
+                        running_instance.cm_w,
+                        incoming_instance.cm_w,
+                        next_running_instance.cm_w,
+                    ]
+                    .into_iter()
+                    .flat_map(|p| [p.x, p.y]),
                 )
                 .collect(),
         ])
@@ -124,76 +131,100 @@ impl<CM: GroupBasedCommitment, const CHALLENGE_BITS: usize> FoldingSchemeCycleFo
 
     #[allow(non_snake_case)]
     fn to_cyclefold_circuits(
-        [U1, U2]: &[impl Borrow<Self::RU>; 2],
+        [left_running_instance, right_running_instance]: &[impl Borrow<Self::RU>; 2],
         _: &[impl Borrow<Self::IU>; 0],
         proof: &Self::Proof<2, 0>,
-        rho_bits: Self::Challenge,
+        challenge: Self::Challenge,
     ) -> Vec<Self::CFCircuit> {
-        let rho = CM::Scalar::from_bits_le(&rho_bits);
+        let challenge_scalar = CM::Scalar::from_bits_le(&challenge);
         vec![
             NovaCycleFoldCircuit {
-                r: rho_bits.into(),
-                points: vec![*proof, U2.borrow().cm_e],
+                r: challenge.into(),
+                points: vec![*proof, right_running_instance.borrow().cm_e],
             },
             NovaCycleFoldCircuit {
-                r: rho_bits.into(),
-                points: vec![U1.borrow().cm_e, U2.borrow().cm_e * rho + proof],
+                r: challenge.into(),
+                points: vec![
+                    left_running_instance.borrow().cm_e,
+                    right_running_instance.borrow().cm_e * challenge_scalar + proof,
+                ],
             },
             NovaCycleFoldCircuit {
-                r: rho_bits.into(),
-                points: vec![U1.borrow().cm_w, U2.borrow().cm_w],
+                r: challenge.into(),
+                points: vec![
+                    left_running_instance.borrow().cm_w,
+                    right_running_instance.borrow().cm_w,
+                ],
             },
         ]
     }
 
     #[allow(non_snake_case)]
     fn to_cyclefold_inputs(
-        [U1, U2]: [<Self::Gadget as FoldingSchemeDefGadget>::RU; 2],
-        _: [<Self::Gadget as FoldingSchemeDefGadget>::IU; 0],
-        UU: <Self::Gadget as FoldingSchemeDefGadget>::RU,
-        proof: <Self::Gadget as FoldingSchemeDefGadget>::Proof<2, 0>,
-        rho_bits: <Self::Gadget as FoldingSchemeDefGadget>::Challenge,
+        [left_running_instance, right_running_instance]: [<Self::Verifier as FoldingSchemeDefGadget>::RU;
+            2],
+        _: [<Self::Verifier as FoldingSchemeDefGadget>::IU; 0],
+        next_running_instance: <Self::Verifier as FoldingSchemeDefGadget>::RU,
+        proof: <Self::Verifier as FoldingSchemeDefGadget>::Proof<2, 0>,
+        challenge_bits: <Self::Verifier as FoldingSchemeDefGadget>::Challenge,
     ) -> Result<Vec<Vec<EmulatedFieldVar<CM::Scalar, CF2<CM::Commitment>>>>, SynthesisError> {
-        let mut rho_bits = rho_bits.to_vec();
-        rho_bits.resize(
+        let mut challenge_bits = challenge_bits.to_vec();
+        challenge_bits.resize(
             CF2::<CM::Commitment>::MODULUS_BIT_SIZE as usize,
             Boolean::FALSE,
         );
-        let rho = EmulatedFieldVar::from_bounded_bits_le(
-            &rho_bits,
+        let challenge = EmulatedFieldVar::from_bounded_bits_le(
+            &challenge_bits,
             Bounds(Zero::zero(), CF2::<CM::Commitment>::MODULUS.into().into()),
         )?;
-        let cm_tmp_cs = U2.cm_e.cs().or(proof.cs()).or(rho_bits.cs());
-        let cm_tmp = EmulatedAffineVar::new_witness(cm_tmp_cs.clone(), || {
-            if cm_tmp_cs.is_in_setup_mode() {
-                return Ok(Default::default());
-            }
-            let rho_bits = rho_bits.value()?;
-            let rho = CM::Scalar::from_bits_le(&rho_bits);
-            let proof_value = proof.value()?;
-            let u2_value = U2.cm_e.value()?;
-            Ok(proof_value + u2_value * rho)
-        })?;
+        let combined_commitment_cs = right_running_instance
+            .cm_e
+            .cs()
+            .or(proof.cs())
+            .or(challenge_bits.cs());
+        let combined_commitment =
+            EmulatedAffineVar::new_witness(combined_commitment_cs.clone(), || {
+                if combined_commitment_cs.is_in_setup_mode() {
+                    return Ok(Default::default());
+                }
+                let challenge_bits = challenge_bits.value()?;
+                let challenge_scalar = CM::Scalar::from_bits_le(&challenge_bits);
+                let proof_value = proof.value()?;
+                let right_running_value = right_running_instance.cm_e.value()?;
+                Ok(proof_value + right_running_value * challenge_scalar)
+            })?;
         Ok(vec![
-            once(rho.clone())
+            once(challenge.clone())
                 .chain(
-                    [proof, U2.cm_e, cm_tmp.clone()]
-                        .into_iter()
-                        .flat_map(|p| [p.x, p.y]),
+                    [
+                        proof,
+                        right_running_instance.cm_e,
+                        combined_commitment.clone(),
+                    ]
+                    .into_iter()
+                    .flat_map(|p| [p.x, p.y]),
                 )
                 .collect(),
-            once(rho.clone())
+            once(challenge.clone())
                 .chain(
-                    [U1.cm_e, cm_tmp, UU.cm_e]
-                        .into_iter()
-                        .flat_map(|p| [p.x, p.y]),
+                    [
+                        left_running_instance.cm_e,
+                        combined_commitment,
+                        next_running_instance.cm_e,
+                    ]
+                    .into_iter()
+                    .flat_map(|p| [p.x, p.y]),
                 )
                 .collect(),
-            once(rho)
+            once(challenge)
                 .chain(
-                    [U1.cm_w, U2.cm_w, UU.cm_w]
-                        .into_iter()
-                        .flat_map(|p| [p.x, p.y]),
+                    [
+                        left_running_instance.cm_w,
+                        right_running_instance.cm_w,
+                        next_running_instance.cm_w,
+                    ]
+                    .into_iter()
+                    .flat_map(|p| [p.x, p.y]),
                 )
                 .collect(),
         ])
@@ -210,38 +241,38 @@ mod tests {
     use ark_grumpkin::Projective as C2;
     use ark_std::{
         error::Error,
-        rand::{RngCore, thread_rng},
+        rand::{thread_rng, RngCore},
         sync::Arc,
     };
     use sonobe_primitives::{
         circuits::{
-            FCircuit,
             reciprocal_test::{NaiveReciprocalCircuitForTest, ReciprocalCircuitForTest},
             utils::CircuitForTest,
+            FCircuit,
         },
-        commitments::{CommitmentOps, pedersen::Pedersen},
+        commitments::{pedersen::Pedersen, CommitmentOps},
         traits::Dummy,
-        transcripts::griffin::{GriffinParams, sponge::GriffinSponge},
+        transcripts::griffin::{sponge::GriffinSponge, GriffinParams},
     };
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
     use super::*;
     use crate::{
-        IVC,
         compilers::cyclefold::adapters::{
             reciprocal::{ReciprocalAdapterError, ReciprocalCycleFoldAdapter},
             reciprocal_bench::{
-                BenchmarkSnapshotRow, benchmark_snapshot_rows, sample_naive_reciprocal_circuit,
-                sample_reciprocal_circuit,
+                benchmark_snapshot_rows, sample_naive_reciprocal_circuit,
+                sample_reciprocal_circuit, BenchmarkSnapshotRow,
             },
             reciprocal_types::{
-                ReciprocalSameQLane, ReciprocalTypeError, ReciprocalWitness,
-                reciprocal_n4_trace_and_output,
+                reciprocal_n4_trace_and_output, ReciprocalSameQLane, ReciprocalTypeError,
+                ReciprocalWitness,
             },
             reciprocal_wrapper::ReciprocalWrapperError,
         },
         tests::run_ivc_smoke_test,
+        IVC,
     };
 
     type TestIVC = NovaNovaIVC<Pedersen<C1, true>, Pedersen<C2, true>, GriffinSponge<Fr>>;

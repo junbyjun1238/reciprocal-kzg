@@ -8,8 +8,8 @@ use ark_std::{
     rand::RngCore,
 };
 use sha3::{
-    Shake128,
     digest::{ExtendableOutput, Update},
+    Shake128,
 };
 use sonobe_fs::{
     DeciderKey, FoldStep, FoldingInstance, FoldingSchemeDef, FoldingSchemeDefGadget,
@@ -22,18 +22,19 @@ use sonobe_primitives::{
     circuits::{ArithExtractor, AssignmentsExtractor, FCircuit},
     commitments::CommitmentDef,
     relations::WitnessInstanceSampler,
-    traits::{CF1, CF2, Dummy, SonobeCurve},
+    traits::{Dummy, SonobeCurve, CF1, CF2},
     transcripts::Transcript,
 };
 
 use crate::{
-    Error, IVC,
     compilers::cyclefold::circuits::{AugmentedCircuit, CycleFoldCircuit},
+    Error, IVC,
 };
 
 pub mod adapters;
 pub mod circuits;
 
+/// Extends a primary folding scheme with the artifacts needed to drive its cyclefold chain.
 pub trait FoldingSchemeCycleFoldExt<const M: usize, const N: usize>:
     GroupBasedFoldingSchemePrimary<M, N>
 {
@@ -41,21 +42,23 @@ pub trait FoldingSchemeCycleFoldExt<const M: usize, const N: usize>:
 
     const N_CYCLEFOLDS: usize;
 
+    /// Builds the auxiliary cyclefold circuits checked by the secondary scheme.
     #[allow(non_snake_case)]
     fn to_cyclefold_circuits(
-        Us: &[impl Borrow<Self::RU>; M],
-        us: &[impl Borrow<Self::IU>; N],
+        running_instances: &[impl Borrow<Self::RU>; M],
+        incoming_instances: &[impl Borrow<Self::IU>; N],
         proof: &Self::Proof<M, N>,
-        rho: Self::Challenge,
+        challenge: Self::Challenge,
     ) -> Vec<Self::CFCircuit>;
 
+    /// Converts primary verifier outputs into public inputs for the secondary cyclefold proofs.
     #[allow(non_snake_case, clippy::type_complexity)]
     fn to_cyclefold_inputs(
-        Us: [<Self::Gadget as FoldingSchemeDefGadget>::RU; M],
-        us: [<Self::Gadget as FoldingSchemeDefGadget>::IU; N],
-        UU: <Self::Gadget as FoldingSchemeDefGadget>::RU,
-        proof: <Self::Gadget as FoldingSchemeDefGadget>::Proof<M, N>,
-        rho: <Self::Gadget as FoldingSchemeDefGadget>::Challenge,
+        running_instances: [<Self::Verifier as FoldingSchemeDefGadget>::RU; M],
+        incoming_instances: [<Self::Verifier as FoldingSchemeDefGadget>::IU; N],
+        next_running_instance: <Self::Verifier as FoldingSchemeDefGadget>::RU,
+        proof: <Self::Verifier as FoldingSchemeDefGadget>::Proof<M, N>,
+        challenge: <Self::Verifier as FoldingSchemeDefGadget>::Challenge,
     ) -> Result<
         Vec<
             Vec<
@@ -116,23 +119,19 @@ struct FoldArtifacts<FS1: FoldingSchemeDef, FS2: FoldingSchemeDef> {
 impl<FS1, FS2, T> CycleFoldBasedIVC<FS1, FS2, T>
 where
     FS1: FoldingSchemeCycleFoldExt<
-            1,
-            1,
-            Arith: From<ConstraintSystem<CF1<<FS1::CM as CommitmentDef>::Commitment>>>,
-            Gadget: FoldingSchemePartialVerifierGadget<1, 1, VerifierKey = ()>,
-            CM: CommitmentDef<
-                Commitment: SonobeCurve<BaseField = <FS2::CM as CommitmentDef>::Scalar>,
-            >,
-        >,
+        1,
+        1,
+        Arith: From<ConstraintSystem<CF1<<FS1::CM as CommitmentDef>::Commitment>>>,
+        Verifier: FoldingSchemePartialVerifierGadget<1, 1, VerifierKey = ()>,
+        CM: CommitmentDef<Commitment: SonobeCurve<BaseField = <FS2::CM as CommitmentDef>::Scalar>>,
+    >,
     FS2: GroupBasedFoldingSchemeSecondary<
-            1,
-            1,
-            Arith: From<ConstraintSystem<CF1<<FS2::CM as CommitmentDef>::Commitment>>>,
-            Gadget: FoldingSchemeFullVerifierGadget<1, 1, VerifierKey = ()>,
-            CM: CommitmentDef<
-                Commitment: SonobeCurve<BaseField = <FS1::CM as CommitmentDef>::Scalar>,
-            >,
-        >,
+        1,
+        1,
+        Arith: From<ConstraintSystem<CF1<<FS2::CM as CommitmentDef>::Commitment>>>,
+        Verifier: FoldingSchemeFullVerifierGadget<1, 1, VerifierKey = ()>,
+        CM: CommitmentDef<Commitment: SonobeCurve<BaseField = <FS1::CM as CommitmentDef>::Scalar>>,
+    >,
     T: Transcript<CF1<<FS1::CM as CommitmentDef>::Commitment>>,
 {
     fn extract_secondary_arith() -> Result<FS2::Arith, Error> {
@@ -226,7 +225,8 @@ where
             let cs = AssignmentsExtractor::new();
             cs.run_with_constraint_system(|cs| cf_circuit.enforce_point_rlc(cs))?;
 
-            let (cf_w, cf_u) = dk2.sample(cs.assignments()?, &mut *rng)?;
+            let (cyclefold_incoming_witness, cyclefold_incoming_instance) =
+                dk2.sample(cs.assignments()?, &mut *rng)?;
             let previous_cyclefold_witness = if index == 0 {
                 cyclefold_running_witness
             } else {
@@ -248,12 +248,12 @@ where
                 transcript,
                 &[previous_cyclefold_witness],
                 &[previous_cyclefold_instance],
-                &[&cf_w],
-                &[&cf_u],
+                &[&cyclefold_incoming_witness],
+                &[&cyclefold_incoming_instance],
                 &mut *rng,
             )?;
 
-            cyclefold_instances[index] = cf_u;
+            cyclefold_instances[index] = cyclefold_incoming_instance;
             cyclefold_proofs[index] = cyclefold_proof;
             cyclefold_witness = next_cyclefold_witness;
             cyclefold_instance = next_cyclefold_instance;
@@ -339,23 +339,19 @@ where
 impl<FS1, FS2, T> IVC for CycleFoldBasedIVC<FS1, FS2, T>
 where
     FS1: FoldingSchemeCycleFoldExt<
-            1,
-            1,
-            Arith: From<ConstraintSystem<CF1<<FS1::CM as CommitmentDef>::Commitment>>>,
-            Gadget: FoldingSchemePartialVerifierGadget<1, 1, VerifierKey = ()>,
-            CM: CommitmentDef<
-                Commitment: SonobeCurve<BaseField = <FS2::CM as CommitmentDef>::Scalar>,
-            >,
-        >,
+        1,
+        1,
+        Arith: From<ConstraintSystem<CF1<<FS1::CM as CommitmentDef>::Commitment>>>,
+        Verifier: FoldingSchemePartialVerifierGadget<1, 1, VerifierKey = ()>,
+        CM: CommitmentDef<Commitment: SonobeCurve<BaseField = <FS2::CM as CommitmentDef>::Scalar>>,
+    >,
     FS2: GroupBasedFoldingSchemeSecondary<
-            1,
-            1,
-            Arith: From<ConstraintSystem<CF1<<FS2::CM as CommitmentDef>::Commitment>>>,
-            Gadget: FoldingSchemeFullVerifierGadget<1, 1, VerifierKey = ()>,
-            CM: CommitmentDef<
-                Commitment: SonobeCurve<BaseField = <FS1::CM as CommitmentDef>::Scalar>,
-            >,
-        >,
+        1,
+        1,
+        Arith: From<ConstraintSystem<CF1<<FS2::CM as CommitmentDef>::Commitment>>>,
+        Verifier: FoldingSchemeFullVerifierGadget<1, 1, VerifierKey = ()>,
+        CM: CommitmentDef<Commitment: SonobeCurve<BaseField = <FS1::CM as CommitmentDef>::Scalar>>,
+    >,
     T: Transcript<CF1<<FS1::CM as CommitmentDef>::Commitment>>,
 {
     type Field = <FS1::CM as CommitmentDef>::Scalar;
@@ -397,7 +393,6 @@ where
         ))
     }
 
-    #[allow(non_snake_case)]
     fn prove<FC: FCircuit<Field = Self::Field>>(
         Key(dk1, dk2, (hash_config, pp_hash)): &Self::ProverKey<FC>,
         step_circuit: &FC,
@@ -431,7 +426,14 @@ where
             arith2_config,
             &mut rng,
         )?;
-        let Proof(_, U, _, u, _, cf_U) = current_proof;
+        let Proof(
+            _,
+            current_running_instance,
+            _,
+            current_incoming_instance,
+            _,
+            current_cyclefold_running_instance,
+        ) = current_proof;
         let cs = AssignmentsExtractor::new();
         let (next_state, external_outputs) = cs.run_with_constraint_system(|cs| {
             let augmented_circuit = AugmentedCircuit::<FS1, FS2, FC, T> {
@@ -447,15 +449,16 @@ where
                 initial_state,
                 current_state,
                 external_inputs,
-                U,
-                u,
+                current_running_instance,
+                current_incoming_instance,
                 primary_proof,
-                cf_U,
+                current_cyclefold_running_instance,
                 cyclefold_instances,
                 cyclefold_proofs,
             )
         })?;
-        let (ww, uu) = dk1.sample(cs.assignments()?, &mut rng)?;
+        let (next_incoming_witness, next_incoming_instance) =
+            dk1.sample(cs.assignments()?, &mut rng)?;
 
         Ok((
             next_state,
@@ -463,21 +466,27 @@ where
             Proof(
                 primary_witness,
                 primary_instance,
-                ww,
-                uu,
+                next_incoming_witness,
+                next_incoming_instance,
                 cyclefold_witness,
                 cyclefold_instance,
             ),
         ))
     }
 
-    #[allow(non_snake_case)]
     fn verify<FC: FCircuit<Field = Self::Field>>(
         Key(dk1, dk2, (hash_config, pp_hash)): &Self::VerifierKey<FC>,
         i: usize,
         initial_state: &FC::State,
         current_state: &FC::State,
-        Proof(W, U, w, u, cf_W, cf_U): &Self::Proof<FC>,
+        Proof(
+            running_witness,
+            running_instance,
+            incoming_witness,
+            incoming_instance,
+            cyclefold_running_witness,
+            cyclefold_running_instance,
+        ): &Self::Proof<FC>,
     ) -> Result<(), Error> {
         if i == 0 {
             return (initial_state == current_state)
@@ -488,21 +497,21 @@ where
         let hash = T::new_with_public_parameter_hash(hash_config, *pp_hash);
         let mut sponge = hash.separate_domain("sponge".as_ref());
 
-        let u_x = sponge
+        let expected_public_input = sponge
             .add(&i)
             .add(initial_state)
             .add(current_state)
-            .add(U)
-            .add(cf_U)
+            .add(running_instance)
+            .add(cyclefold_running_instance)
             .get_field_element();
 
-        if u.public_inputs() != [u_x] {
+        if incoming_instance.public_inputs() != [expected_public_input] {
             return Err(Error::IVCVerificationFail);
         }
 
-        FS1::decide_running(dk1, W, U)?;
-        FS1::decide_incoming(dk1, w, u)?;
-        FS2::decide_running(dk2, cf_W, cf_U)?;
+        FS1::decide_running(dk1, running_witness, running_instance)?;
+        FS1::decide_incoming(dk1, incoming_witness, incoming_instance)?;
+        FS2::decide_running(dk2, cyclefold_running_witness, cyclefold_running_instance)?;
 
         Ok(())
     }
