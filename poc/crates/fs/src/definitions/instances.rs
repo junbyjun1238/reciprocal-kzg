@@ -10,7 +10,7 @@ use ark_relations::gr1cs::{ConstraintSystemRef, Namespace, SynthesisError};
 use ark_std::{
     borrow::Borrow,
     fmt::Debug,
-    ops::{Deref, DerefMut},
+    ops::Deref,
     slice::Iter,
     vec::IntoIter,
 };
@@ -46,16 +46,22 @@ pub trait FoldingInstance<CM: CommitmentDef>: Clone + Debug + PartialEq + Eq + A
 pub struct PlainInstance<V>(Vec<V>);
 
 impl<V> Deref for PlainInstance<V> {
-    type Target = Vec<V>;
+    type Target = [V];
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        self.0.as_slice()
     }
 }
 
-impl<V> DerefMut for PlainInstance<V> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+impl<V> AsRef<[V]> for PlainInstance<V> {
+    fn as_ref(&self) -> &[V] {
+        self.0.as_slice()
+    }
+}
+
+impl<V> AsMut<[V]> for PlainInstance<V> {
+    fn as_mut(&mut self) -> &mut [V] {
+        self.0.as_mut_slice()
     }
 }
 
@@ -101,12 +107,6 @@ impl<'a, V: Sync> IntoParallelIterator for &'a PlainInstance<V> {
     }
 }
 
-impl<V> From<PlainInstance<V>> for Vec<V> {
-    fn from(value: PlainInstance<V>) -> Self {
-        value.0
-    }
-}
-
 impl<V: Absorbable> Absorbable for PlainInstance<V> {
     fn absorb_into<F: PrimeField>(&self, dest: &mut Vec<F>) {
         self.0.absorb_into(dest)
@@ -126,7 +126,7 @@ impl<F: Field, X: AllocVar<Y, F>, Y> AllocVar<PlainInstance<Y>, F> for PlainInst
         mode: AllocationMode,
     ) -> Result<Self, SynthesisError> {
         let value = f()?;
-        Vec::new_variable(cs, || Ok(&value.borrow()[..]), mode).map(Self)
+        Vec::new_variable(cs, || Ok(value.borrow().as_ref()), mode).map(Self)
     }
 }
 
@@ -175,11 +175,11 @@ impl<CM: CommitmentDef> FoldingInstance<CM> for PlainInstance<CM::Scalar> {
     }
 
     fn public_inputs(&self) -> &[CM::Scalar] {
-        self
+        self.as_ref()
     }
 
     fn public_inputs_mut(&mut self) -> &mut [CM::Scalar] {
-        self
+        self.as_mut()
     }
 }
 
@@ -211,7 +211,7 @@ impl<CM: CommitmentDefGadget> FoldingInstanceVar<CM> for PlainInstanceVar<CM::Sc
     }
 
     fn public_inputs(&self) -> &[CM::ScalarVar] {
-        self
+        self.as_ref()
     }
 
     fn new_witness_with_public_inputs(

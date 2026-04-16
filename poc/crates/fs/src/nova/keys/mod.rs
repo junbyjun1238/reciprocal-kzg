@@ -74,7 +74,7 @@ where
 
 impl<A, CM> Relation<PW<CM::Scalar>, PU<CM::Scalar>> for NovaKey<A, CM>
 where
-    A: ArithRelation<Vec<CM::Scalar>, Vec<CM::Scalar>>,
+    A: ArithRelation<PW<CM::Scalar>, PU<CM::Scalar>>,
     CM: CommitmentDef,
 {
     type Error = Error;
@@ -141,5 +141,20 @@ where
         let (cm_w, r_w) = CM::commit(&self.ck, &w, &mut rng)?;
         let (cm_e, r_e) = CM::commit(&self.ck, &e, &mut rng)?;
         Ok((RW { w, r_w, e, r_e }, RU { cm_w, x, cm_e, u }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ark_bn254::Fr;
+    use sonobe_primitives::arithmetizations::{ArithRelation, r1cs::R1CS};
+
+    use crate::{PlainInstance, PlainWitness};
+
+    #[test]
+    fn plain_folding_types_fit_arith_relation_inputs() {
+        fn accepts_plain_inputs<A: ArithRelation<PlainWitness<Fr>, PlainInstance<Fr>>>() {}
+
+        accepts_plain_inputs::<R1CS<Fr>>();
     }
 }
