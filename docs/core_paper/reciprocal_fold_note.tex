@@ -1,0 +1,1301 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{stmaryrd}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{remark}[theorem]{Remark}
+
+\title{A Note on Reciprocal-Chart Folding over Quartic Extensions}
+\author{Seongjun Park\\Independent Researcher\\\texttt{parksj0106@gmail.com}}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We study reciprocal-chart folding over a quartic extension \(E/F\). Fix a seed \(\tau\in E\) with \(F(\tau)=E\), and let the public orbit be defined by
+\[
+r_1=\tau,
+\qquad
+r_{i+1}=\frac{1}{r_i-c_i},
+\qquad
+c_i=
+\begin{cases}
+0,& i\text{ odd},\\
+1,& i\text{ even}.
+\end{cases}
+\]
+For \(F\)-valued leaves, we show that every round admits an exact reciprocal transport in the moving basis \(\{1,r_i,r_i^2,r_i^3\}\). This yields, for every depth \(n\ge 1\), a seed-specialized public \(F\)-linear evaluator
+\[
+T_{\tau,n}:F^{2^n}\to F^4
+\]
+whose intermediate values are always represented by vectors in \(F^4\).
+
+Our main theorem gives an exact descriptor for this evaluator family. From the seed descriptor \((n,\tau)\), one can compute in \(O(n)\) base-field operations a reduced fold descriptor of size exactly \(4(n-1)\) field words together with \(8\) field words of reconstruction data. The reduced descriptor supports \(O(n)\)-time coefficient queries for entries of the matrix of \(T_{\tau,n}\), and an explicit evaluation algorithm computes \(T_{\tau,n}(x)\) in \(O(N)\) time for \(N=2^n\). Under the canonical straight-line implementation analyzed here, the algorithm performs exactly \(2N-4\) base-field multiplications on \(F\)-valued leaves.
+
+This paper formalizes a cryptographically relevant algebraic backend for downstream commitment/opening protocols and non-interactive proof compilers: a constant-width seed-specialized evaluator, its exact descriptor size, and the structural implication for downstream interfaces that a layer restricted to explicit row vectors cannot preserve the \(O(n)\)-word specialization. A minimal information-theoretic oracle-model one-shot soundness theorem for the evaluator relation, with the output fixed before scalarization and with fresh verifier randomness, is also established.
+\end{abstract}
+
+\section{Introduction}
+
+Reciprocal-chart folding appears naturally in sumcheck-style folding questions \cite{LFKN92,BootleChiesaSotiraki2021}. Once a post-commit seed \(\tau\) is fixed, however, the most natural abstraction is not an interactive transcript but the induced linear evaluator
+\[
+T_{\tau,n}:F^{2^n}\to F^4,
+\]
+obtained by iterating a public M\"obius orbit and an exact round-by-round reciprocal transport. The purpose of this paper is to formalize that evaluator family in the first nontrivial closed-form case: a quartic extension \(E/F\) with the alternating \(0/1\) orbit.
+
+Existing presentations of sumcheck-style folding \cite{LFKN92,BootleChiesaSotiraki2021} and related algebraic backends typically describe the round-by-round update at a schematic level, leaving the concrete transport identities, descriptor sizes, and arithmetic costs implicit. In particular, for extensions of degree greater than two, no prior work provides an exact closed-form local fold identity in a moving power basis, a fully explicit reduced descriptor with a provable size bound, or the precise multiplication count of the resulting algorithm. This gap matters for downstream layers: without an exact algebraic specification, commitment/opening protocols and non-interactive compilers must either re-derive the round structure internally or fall back to generic interfaces that forfeit the logarithmic-size seed specialization.
+
+This backend viewpoint is cryptographically useful for two complementary reasons. First, commitment and opening layers for structured linear families must decide whether they can consume a seed-dependent structured descriptor or whether they must materialize explicit rows \cite{CampanelliEtAl2022LMVC,CatalanoFioreTucker2022AHFC,BalbasCatalanoFioreLai2022CFC,FischLiuVesely2024Orbweaver}. Second, later non-interactive or correlated-challenge analyses are cleaner once the algebraic backend has already been stated as a precise linear object \cite{CanettiEtAl2018FS,BlockEtAl2023FRI}. In the quartic reciprocal chart studied here, that backend is highly structured: each active intermediate value remains in \(F^4\), the seed specialization is describable in \(O(n)\) words, and explicit-row interfaces lose that succinctness.
+
+\paragraph{Contributions.}
+Our main contributions are as follows.
+\begin{enumerate}[label=\arabic*.]
+\item We prove an \emph{exact local reciprocal fold identity} in a moving quartic basis.
+\item We prove a \emph{structured evaluator theorem}: for \(F\)-valued leaves, the seed-specialized map \(T_{\tau,n}\) admits a reduced public descriptor of size exactly \(4(n-1)\), an \(O(n)\)-time coefficient oracle, and an \(O(N)\)-time evaluation procedure.
+\item We prove an \emph{exact canonical multiplication count} of \(2N-4\) for the explicit evaluation algorithm applied to \(F\)-valued leaves.
+\item We establish an \emph{implication for downstream interfaces}: any downstream layer that insists on explicit row vectors must materialize the four rows of \(T_{\tau,n}\), and therefore cannot preserve the \(O(n)\)-word seed-dependent specialization.
+\end{enumerate}
+
+\subsection*{Related work and positioning}
+
+Classical sumcheck originates with Lund, Fortnow, Karloff, and Nisan \cite{LFKN92}; modern cryptographic presentations include \cite{BootleChiesaSotiraki2021}, and recent implementation-oriented analyses include \cite{BagadDombThaler2024SmallChar,Rothblum2024MLENote}. On the commitment side, succinct openings for structured linear families are studied by, among others, \cite{CampanelliEtAl2022LMVC,CatalanoFioreTucker2022AHFC,BalbasCatalanoFioreLai2022CFC,FischLiuVesely2024Orbweaver}. On the folding side, recent protocol-level systems such as Nova, ProtoStar, and HyperNova develop recursive or accumulation-based proof layers above algebraic backends \cite{KothapalliSettyTzialla2021Nova,BuenzChen2023ProtoStar,KothapalliSetty2023HyperNova}. This paper presents a seed-specialized linear evaluator and establishes a minimal one-shot soundness statement in the oracle model that later cryptographic layers may refine.
+
+\subsection*{Scope and organization}
+
+We focus on the quartic case \([E:F]=4\) and on the alternating \(0/1\) schedule because this is the first degree in which the moving basis, reciprocal transport, coefficient update, and exact arithmetic constants all fit in a short self-contained treatment. The aim is precision rather than maximal generality. Sections~2--4 develop the algebraic backend, Section~5 gives the worked \(N=4\) example, Section~6 fixes the arithmetic cost model, Section~7 establishes the implication for explicit-row interfaces, and Section~8 offers concluding remarks. The appendix establishes a minimal information-theoretic soundness statement in an idealized oracle model where the claimed output is fixed before scalarization; concrete commitment/opening and Fiat--Shamir layers build on this foundation as subsequent work.
+
+\section{Algebraic Setup and Reciprocal Orbit}
+
+Sections~2 through~5 develop the algebraic backend, with Section~5 presenting the first detailed example. Section~6 then defines an arithmetic cost model in order to state exact multiplication counts. Let \(F\) be a field of characteristic different from \(2\) and \(3\), let \(E/F\) be a quartic extension, and let
+\[
+N=2^n,
+\qquad n\ge 1.
+\]
+We index leaves by
+\[
+j\in\{0,\dots,N-1\},
+\qquad
+j=\sum_{i=1}^{n} b_i2^{i-1},
+\qquad
+b_i\in\{0,1\},
+\]
+using the least-significant-first path convention.
+
+Whenever an integer \(k\) appears in a field expression, it denotes its image in \(F\).
+
+Define the algebraic seed domain
+\[
+\Omega^{\mathrm{alg}}:=\{\tau\in E : F(\tau)=E\}.
+\]
+
+For \(\tau\in\Omega^{\mathrm{alg}}\), define the public challenge orbit by
+\[
+r_1=\tau,
+\qquad
+r_{i+1}=\frac{1}{r_i-c_i},
+\qquad
+c_i=
+\begin{cases}
+0,& i\text{ odd},\\
+1,& i\text{ even}.
+\end{cases}
+\]
+
+\begin{lemma}[Orbit formulas and moving charts]
+\label{lem:orbit}
+Let \(\tau\in\Omega^{\mathrm{alg}}\). Then every reciprocal update is well-defined. Moreover, for every admissible \(k\) one has
+\[
+r_{2k+1}=\frac{\tau}{1-k\tau},
+\qquad
+r_{2k+2}=\frac{1-k\tau}{\tau},
+\]
+and for every admissible round \(i\),
+\[
+F(r_i)=E.
+\]
+In particular, \(\{1,r_i,r_i^2,r_i^3\}\) is an \(F\)-basis of \(E\) at every round.
+\end{lemma}
+
+\begin{proof}
+Since \(\tau\notin F\), one has \(\tau\neq 0\). If \(1-k\tau=0\) for some admissible integer \(k\), then the image of \(k\) in \(F\) is nonzero, for otherwise the left-hand side would equal \(1\). Hence \(k\) is invertible in \(F\), so \(\tau=k^{-1}\in F\), contradicting \(F(\tau)=E\). Therefore, the denominators in the displayed closed forms are nonzero.
+
+The formulas follow by induction on \(k\). The base cases \(r_1=\tau\) and \(r_2=\tau^{-1}\) are immediate. If \(r_{2k+1}=\tau/(1-k\tau)\), then
+\[
+r_{2k+2}=\frac{1}{r_{2k+1}}=\frac{1-k\tau}{\tau}.
+\]
+If \(r_{2k+2}=(1-k\tau)/\tau\), then
+\[
+r_{2k+3}=\frac{1}{r_{2k+2}-1}=\frac{1}{(1-(k+1)\tau)/\tau}=\frac{\tau}{1-(k+1)\tau}.
+\]
+Each \(r_i\) is obtained from \(\tau\) by an invertible M\"obius transformation with coefficients in \(F\), so \(F(r_i)=F(\tau)=E\). Since \([E:F]=4\), the displayed set is an \(F\)-basis.
+\end{proof}
+
+For each round \(i\), let
+\[
+m_i(X)=X^4-\mu_{i,3}X^3-\mu_{i,2}X^2-\mu_{i,1}X-\mu_{i,0}
+\]
+be the monic minimal polynomial of \(r_i\) over \(F\), so that
+\[
+r_i^4=\mu_{i,3}r_i^3+\mu_{i,2}r_i^2+\mu_{i,1}r_i+\mu_{i,0}.
+\]
+Write
+\[
+\mu_i:=(\mu_{i,0},\mu_{i,1},\mu_{i,2},\mu_{i,3})\in F^4.
+\]
+
+An active entry at round \(i\) is stored as a four-word state
+\[
+s=(a_0,a_1,a_2,a_3)\in F^4,
+\]
+which, together with a shared denominator \(\Delta_i\in E^\times\), represents the element
+\[
+\llbracket s\rrbracket_i
+=
+\Delta_i^{-1}\big(a_0+a_1r_i+a_2r_i^2+a_3r_i^3\big).
+\]
+Equivalently, if
+\[
+P_s(Y):=a_0+a_1Y+a_2Y^2+a_3Y^3,
+\]
+then \(\llbracket s\rrbracket_i=\Delta_i^{-1}P_s(r_i)\).
+
+For a scalar input \(v\), the initial state is
+\[
+\Delta_1=1,
+\qquad
+s(v)=(v,0,0,0)\quad(v\in F).
+\]
+The shared denominator evolves by
+\[
+\Delta_{i+1}=\Delta_i r_{i+1}^3.
+\]
+
+\begin{lemma}[Closed forms for the shared denominator]
+\label{lem:delta}
+For every admissible integer \(k\), one has
+\[
+\Delta_{2k}=\tau^{-3},
+\qquad
+\Delta_{2k+1}=(1-k\tau)^{-3}.
+\]
+\end{lemma}
+
+\begin{proof}
+The base cases are \(\Delta_1=1=(1-0\cdot\tau)^{-3}\) and
+\[
+\Delta_2=\Delta_1 r_2^3=\tau^{-3}.
+\]
+Assume \(\Delta_{2k}=\tau^{-3}\). Using Lemma~\ref{lem:orbit},
+\[
+\Delta_{2k+1}=\Delta_{2k}r_{2k+1}^3
+=\tau^{-3}\left(\frac{\tau}{1-k\tau}\right)^3
+=(1-k\tau)^{-3}.
+\]
+Then
+\[
+\Delta_{2k+2}=\Delta_{2k+1}r_{2k+2}^3
+=(1-k\tau)^{-3}\left(\frac{1-k\tau}{\tau}\right)^3
+=\tau^{-3}.
+\]
+This proves both formulas by induction.
+\end{proof}
+
+\section{Exact Local Reciprocal Fold}
+
+Fix an admissible round \(i\), and write \(r=r_i\), \(c=c_i\), and \(\mu=\mu_i\). For adjacent states
+\[
+s_0=(a_0,a_1,a_2,a_3),
+\qquad
+s_1=(b_0,b_1,b_2,b_3),
+\]
+set \(\delta_j=b_j-a_j\). Define the intermediate state \(u=(u_0,u_1,u_2,u_3)\) by
+\[
+u_0=a_0+\mu_0\delta_3,
+\qquad
+u_1=a_1+\delta_0+\mu_1\delta_3,
+\]
+\[
+u_2=a_2+\delta_1+\mu_2\delta_3,
+\qquad
+u_3=a_3+\delta_2+\mu_3\delta_3.
+\]
+Equivalently,
+\[
+u=s_0+S_{\mu}(s_1-s_0),
+\qquad
+S_{\mu}=
+\begin{pmatrix}
+0&0&0&\mu_0\\
+1&0&0&\mu_1\\
+0&1&0&\mu_2\\
+0&0&1&\mu_3
+\end{pmatrix}.
+\]
+The chart transport map is
+\[
+R_0(u_0,u_1,u_2,u_3)=(u_3,u_2,u_1,u_0),
+\]
+for odd rounds, and
+\[
+R_1(u_0,u_1,u_2,u_3)=
+\big(u_3,\ u_2+3u_3,\ u_1+2u_2+3u_3,\ u_0+u_1+u_2+u_3\big),
+\]
+for even rounds.
+
+The Step-A update satisfies the identity
+\[
+P_u(r)=P_{s_0}(r)+r\big(P_{s_1}(r)-P_{s_0}(r)\big).
+\]
+In particular, all seed dependence in the local fold is completely captured by the coefficient tuple \(\mu_i\), and within Step A it affects the computation only through the single scalar \(\delta_3\).
+
+\begin{lemma}[Transport identities]
+\label{lem:transport}
+For every \(u\in F^4\),
+\[
+P_{R_0u}(Y)=Y^3P_u(Y^{-1}),
+\qquad
+P_{R_1u}(Y)=Y^3P_u(1+Y^{-1}).
+\]
+Consequently, if \(r_{i+1}=1/(r_i-c_i)\) and \(\Delta_{i+1}=\Delta_i r_{i+1}^3\), then for \(s'=R_{c_i}u\),
+\[
+\Delta_{i+1}^{-1}P_{s'}(r_{i+1})
+=
+\Delta_i^{-1}P_u(r_i).
+\]
+\end{lemma}
+
+\begin{proof}
+The displayed polynomial identities are immediate from the definitions of \(R_0\) and \(R_1\). For \(c_i=0\), one has \(r_i=r_{i+1}^{-1}\); for \(c_i=1\), one has \(r_i=1+r_{i+1}^{-1}\). Substituting these relations and using \(\Delta_{i+1}=\Delta_i r_{i+1}^3\) yields the claim.
+\end{proof}
+
+\begin{theorem}[Exact reciprocal-chart fold]
+\label{thm:exact-fold}
+Let \(u=s_0+S_{\mu_i}(s_1-s_0)\) and \(s'=R_{c_i}u\). Then
+\[
+\llbracket s'\rrbracket_{i+1}
+=
+\llbracket s_0\rrbracket_i+r_i\big(\llbracket s_1\rrbracket_i-\llbracket s_0\rrbracket_i\big).
+\]
+In particular, each fold step from length \(N/2^{i-1}\) to length \(N/2^i\) is exact, the active state entries remain in \(F^4\), and the denominator update is globally shared.
+\end{theorem}
+
+\begin{proof}
+By the quartic relation for \(r_i\),
+\[
+P_u(r_i)=P_{s_0}(r_i)+r_i\big(P_{s_1}(r_i)-P_{s_0}(r_i)\big).
+\]
+Applying Lemma~\ref{lem:transport} to \(s'=R_{c_i}u\) gives
+\[
+\Delta_{i+1}^{-1}P_{s'}(r_{i+1})=\Delta_i^{-1}P_u(r_i),
+\]
+which is exactly the displayed identity after substituting the definition of \(P_u(r_i)\).
+\end{proof}
+
+\section{Global Structured Evaluator and Reduced Descriptor}
+
+The local rule of Theorem~\ref{thm:exact-fold} is linear over \(F\). At round \(i\), each adjacent pair is updated by
+\[
+(s_{2t},s_{2t+1})\longmapsto A_i s_{2t}+B_i s_{2t+1},
+\]
+where
+\[
+A_i=R_{c_i}(I-S_{\mu_i}),
+\qquad
+B_i=R_{c_i}S_{\mu_i}.
+\]
+
+The first round simplifies further because the leaves are scalar states.
+
+\begin{lemma}[Seed-independence of the first round]
+\label{lem:first-round}
+For any \(v_0,v_1\in F\),
+\[
+R_0\big(s(v_0)+S_{\mu_1}(s(v_1)-s(v_0))\big)=(0,0,v_1-v_0,v_0),
+\]
+and this value is independent of \(\mu_1\).
+\end{lemma}
+
+\begin{proof}
+Since \(s(v_1)-s(v_0)=(v_1-v_0,0,0,0)\), one has
+\[
+S_{\mu_1}(s(v_1)-s(v_0))=(0,v_1-v_0,0,0).
+\]
+Thus
+\[
+s(v_0)+S_{\mu_1}(s(v_1)-s(v_0))=(v_0,v_1-v_0,0,0),
+\]
+and applying \(R_0\) yields the claim.
+\end{proof}
+
+For all complexity analyses, we work in the finite-field specialization
+\[
+F=\mathbb F_q,
+\qquad
+E=\mathbb F_{q^4},
+\qquad
+\operatorname{char}(F)>3,
+\]
+and count arithmetic operations over \(F\) in the unit-cost model. Public descriptors are encoded relative to a fixed ambient \(F\)-basis of \(E\), while intermediate fold states continue to use the moving round basis \(\{1,r_i,r_i^2,r_i^3\}\).
+
+Define the public descriptors
+\[
+d^{\mathrm{seed}}_{\tau,n}:=(n,\tau),
+\qquad
+d^{\mathrm{fold}}_{\tau,n}:=(\mu_2,\dots,\mu_n)\in F^{4(n-1)},
+\]
+where for \(n=1\) the fold descriptor is the empty tuple, and
+\[
+d^{\mathrm{rec}}_{\tau,n}:=(r_{n+1},\Delta_{n+1})\in E\times E^\times.
+\]
+The fold descriptor describes the evaluator on \(F\)-valued leaves; the reconstruction descriptor is only needed to recover the terminal \(E\)-valued quantity represented by the final state.
+
+For the seed-independent first round, define the fixed branch vectors
+\[
+\nu^{(0)}:=(0,0,-1,1)^\top,
+\qquad
+\nu^{(1)}:=(0,0,1,0)^\top.
+\]
+For rounds \(i\ge 2\), define the branch matrices
+\[
+M_i^{(0)}:=A_i,
+\qquad
+M_i^{(1)}:=B_i.
+\]
+
+\begin{theorem}[Structured evaluator and reduced descriptor]
+\label{thm:descriptor}
+For every \(\tau\in\Omega^{\mathrm{alg}}\), the reciprocal folding construction defines a public \(F\)-linear map
+\[
+T_{\tau,n}:F^N\to F^4.
+\]
+Moreover:
+\begin{enumerate}[label=\arabic*.]
+\item There is a deterministic expansion algorithm
+   \[
+   \mathsf{Expand}:(n,\tau)\longmapsto \big(d^{\mathrm{fold}}_{\tau,n},d^{\mathrm{rec}}_{\tau,n}\big)
+   \]
+   running in \(O(n)\) base-field operations.
+\item The reduced fold descriptor has size exactly \(4(n-1)\) base-field words. Relative to a fixed ambient \(F\)-basis of \(E\), the reconstruction descriptor has size exactly \(8\) base-field words.
+\item For each \(j=\sum_{i=1}^{n} b_i2^{i-1}\), the \(j\)-th column of \(T_{\tau,n}\) is
+   \[
+   T_{\tau,n}(e_j^{(N)})=
+   \begin{cases}
+   \nu^{(b_1)},& n=1,\\[0.5ex]
+   M_n^{(b_n)}\cdots M_2^{(b_2)}\nu^{(b_1)},& n\ge 2,
+   \end{cases}
+   \]
+   where \(e_j^{(N)}\) is the \(j\)-th standard basis vector of \(F^N\). Hence any coefficient of the matrix of \(T_{\tau,n}\) is computable in \(O(n)\) time from \(d^{\mathrm{fold}}_{\tau,n}\).
+\item Given \(d^{\mathrm{fold}}_{\tau,n}\) and \(x\in F^N\), the explicit evaluation algorithm computes \(T_{\tau,n}(x)\) in \(O(N)\) base-field operations using \(O(1)\) field words per active array entry.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+Linearity follows because each round is an explicit \(F\)-linear block map and the initialization is linear. For expansion, represent \(E\) relative to a fixed ambient \(F\)-basis and compute the minimal polynomial of \(\tau\) using constant-size linear algebra; this costs \(O(1)\) because the extension degree is fixed at \(4\). Proposition~\ref{prop:coeff-update} gives an \(O(1)\)-time update for the coefficient tuple at each round, and the orbit point \(r_{i+1}\) and shared denominator \(\Delta_{i+1}\) are also updated in \(O(1)\) time per round. Thus \(\mathsf{Expand}\) runs in \(O(n)\) time. The output includes only \(\mu_2,\dots,\mu_n\) because Lemma~\ref{lem:first-round} shows that the first round on scalar leaves is seed-independent. Item (2) is immediate from the descriptor definitions.
+
+For Item (3), the first path bit \(b_1\) selects one of the two fixed round-1 branch vectors \(\nu^{(0)}\) or \(\nu^{(1)}\). Each subsequent bit \(b_i\) selects the left or right branch matrix \(M_i^{(0)}\) or \(M_i^{(1)}\). Composing these choices gives the displayed column formula. Each step is a constant-size matrix-vector multiplication, so the cost is \(O(n)\). Item (4) is exactly the explicit evaluation algorithm of Theorem~\ref{thm:exact-fold} applied layer by layer to the state array.
+\end{proof}
+
+\begin{remark}[Reduced versus uniform per-round descriptors]
+\label{rem:tight-vs-uniform}
+The theorem above states the reduced descriptor size for the evaluator \(T_{\tau,n}:F^N\to F^4\) on \(F\)-valued leaves. If one instead wants a uniform round-by-round transcript, one may also store \(\mu_1\), obtaining a descriptor of size exactly \(4n\). This extra first-round tuple does not affect the algebraic structure and is not needed for the evaluator itself.
+\end{remark}
+
+In particular, there exist unique row vectors
+\[
+\lambda_{\tau,n}^{(0)},\lambda_{\tau,n}^{(1)},\lambda_{\tau,n}^{(2)},\lambda_{\tau,n}^{(3)}\in F^N
+\]
+such that
+\[
+T_{\tau,n}(x)=
+\big(
+\langle\lambda_{\tau,n}^{(0)},x\rangle,
+\langle\lambda_{\tau,n}^{(1)},x\rangle,
+\langle\lambda_{\tau,n}^{(2)},x\rangle,
+\langle\lambda_{\tau,n}^{(3)},x\rangle
+\big).
+\]
+The terminal extension-field value represented by the final state is recovered by the public reconstruction map
+\[
+\mathsf{Rec}_{\tau,n}(z_0,z_1,z_2,z_3)
+:=
+\Delta_{n+1}^{-1}\big(z_0+z_1r_{n+1}+z_2r_{n+1}^2+z_3r_{n+1}^3\big)\in E.
+\]
+
+\begin{remark}[Scope of the quartic case]
+\label{rem:quartic}
+The quartic case is singled out because it already yields a nontrivial constant-width evaluator with fully explicit local transport, a closed-form coefficient update, and exact arithmetic constants. Higher-degree analogues are a natural next direction.
+\end{remark}
+
+\begin{remark}[Materializing explicit rows]
+\label{rem:rows}
+The full \(4\times N\) matrix of \(T_{\tau,n}\) can be explicitly formed in \(O(N)\) time by reverse propagation through the depth-\(n\) binary circuit. This is routine once the branch vectors and branch matrices are known, but it matters later when determining whether a subsequent protocol can take the structured descriptor directly as input, or whether it requires explicit rows.
+\end{remark}
+
+\section[Worked Example: N=4]{Worked Example: \(N=4\)}
+
+The case \(N=4=2^2\) is the first nontrivial instance and is worth writing out explicitly. Let
+\[
+x=(x_0,x_1,x_2,x_3)\in F^4.
+\]
+At round \(1\), the two leaf pairs are \((x_0,x_1)\) and \((x_2,x_3)\). By Lemma~\ref{lem:first-round}, the first round is seed-independent:
+\[
+s_{01}^{(1)}=(0,0,x_1-x_0,x_0),
+\qquad
+s_{23}^{(1)}=(0,0,x_3-x_2,x_2).
+\]
+In particular, \(\mu_1\) does not appear anywhere in the evaluator for \(N=4\).
+
+Now let \(\mu_2=(\mu_{2,0},\mu_{2,1},\mu_{2,2},\mu_{2,3})\). The single surviving pair at round \(2\) is
+\[
+s_0=(0,0,x_1-x_0,x_0),
+\qquad
+s_1=(0,0,x_3-x_2,x_2).
+\]
+Hence
+\[
+\delta_0=\delta_1=0,
+\qquad
+\delta_2=(x_3-x_2)-(x_1-x_0),
+\qquad
+\delta_3=x_2-x_0,
+\]
+and Step A yields
+\[
+u_0=\mu_{2,0}(x_2-x_0),
+\qquad
+u_1=\mu_{2,1}(x_2-x_0),
+\]
+\[
+u_2=(x_1-x_0)+\mu_{2,2}(x_2-x_0),
+\qquad
+u_3=x_0+\delta_2+\mu_{2,3}(x_2-x_0).
+\]
+Applying the even-round transport gives the final state
+\[
+T_{\tau,2}(x)=R_1u=(z_0,z_1,z_2,z_3),
+\]
+with explicit matrix form
+\[
+T_{\tau,2}(x)=
+\begin{pmatrix}
+2-\mu_{2,3} & -1 & \mu_{2,3}-1 & 1\\
+5-\mu_{2,2}-3\mu_{2,3} & -2 & \mu_{2,2}+3\mu_{2,3}-3 & 3\\
+4-\mu_{2,1}-2\mu_{2,2}-3\mu_{2,3} & -1 & \mu_{2,1}+2\mu_{2,2}+3\mu_{2,3}-3 & 3\\
+1-\sum_{j=0}^{3}\mu_{2,j} & 0 & \sum_{j=0}^{3}\mu_{2,j}-1 & 1
+\end{pmatrix}
+\begin{pmatrix}
+x_0\\x_1\\x_2\\x_3
+\end{pmatrix}.
+\]
+This makes the global linearity explicit: the four displayed rows are precisely
+\[
+\lambda_{\tau,2}^{(0)},\lambda_{\tau,2}^{(1)},\lambda_{\tau,2}^{(2)},\lambda_{\tau,2}^{(3)}.
+\]
+
+The multiplication count also matches the general theorem of the next section: round \(1\) requires zero multiplications, and round \(2\) requires exactly four, hence
+\[
+M_{\mathrm{canon}}(4)=4=2\cdot 4-4.
+\]
+
+\section{Exact Canonical Multiplication Count}
+
+We determine the exact multiplication complexity of the explicit evaluation algorithm under a simple straight-line implementation model.
+\begin{itemize}[leftmargin=1.5em]
+\item Leaves are initialized as scalars \((v,0,0,0)\).
+\item In round \(1\), scalar inputs are processed by the specialized routine
+  \[
+  \mathsf{FoldPairScalar}(v_0,v_1):=(0,0,v_1-v_0,v_0),
+  \]
+  which is exactly the odd-round transport of \((v_0,v_1-v_0,0,0)\) and uses no field multiplication.
+\item From round \(2\) onward, the algorithm uses the generic Step-A update with the four products
+  \[
+  \mu_0\delta_3,\quad \mu_1\delta_3,\quad \mu_2\delta_3,\quad \mu_3\delta_3,
+  \]
+  followed by the public transport \(R_0\) or \(R_1\).
+\item Additions, subtractions, rewiring, and add-chain realizations of multiplication by the public constants \(2\) and \(3\) incur no multiplicative cost.
+\item No further runtime sparsity specialization is performed after round \(1\).
+\end{itemize}
+
+\begin{proposition}[Exact canonical multiplication count]
+\label{prop:canon}
+Assume \(N=2^n\) with \(n\ge 1\). Under the canonical implementation above, the explicit evaluation algorithm performs exactly
+\[
+M_{\mathrm{canon}}(N)=2N-4
+\]
+base-field multiplications on \(F\)-valued leaves.
+
+Here the count refers only to the local fold arithmetic once the public tuples \(\mu_2,\dots,\mu_n\) are already known. It excludes descriptor expansion, terminal reconstruction in \(E\), and any commitment/opening overhead.
+\end{proposition}
+
+\begin{proof}
+Round \(1\) contains \(N/2\) pairs, and each is processed by \(\mathsf{FoldPairScalar}\), so round \(1\) requires zero multiplications. Every later pair requires exactly four multiplications from Step~A and none from transport. The number of pairs after round \(1\) is
+\[
+\sum_{i=2}^{n}\frac{N}{2^i}=\frac{N}{2}-1.
+\]
+Therefore
+\[
+M_{\mathrm{canon}}(N)=4\left(\frac{N}{2}-1\right)=2N-4.
+\]
+\end{proof}
+
+If each multiplication by the public constants \(2\) and \(3\) is counted as a full field multiplication, then every even-round transport \(R_1\) can be realized with at most two additional multiplications per surviving pair: one for \(3u_3\), and one for \(2u_2\), while \(2u_3=(3u_3)-u_3\) is then computed without additional multiplications. Summing those additional costs over even rounds gives
+\[
+M_{\mathrm{cons}}(N)
+\le
+M_{\mathrm{canon}}(N)+2\sum_{\substack{2\le i\le n\\ i\text{ even}}}\frac{N}{2^i}
+< 2N-4+\frac{2N}{3}
+=\frac{8}{3}N-4.
+\]
+
+Proposition~\ref{prop:canon} captures a structural property of the reciprocal chart: all seed dependence is concentrated into the single scalar \(\delta_3\) per surviving pair, while the chart transport itself is multiplication-free under the canonical model.
+
+\subsection*{Direct Fixed-Basis Baseline}
+
+To establish a baseline for comparison, consider the most direct ambient-basis implementation of the same logical fold: each intermediate value is stored in a fixed \(F\)-basis of \(E\), and each surviving pair is updated by
+\[
+w' = w_0 + r_i(w_1-w_0),
+\]
+where \(r_i\in E\) is the public round challenge. Let \(m_{F,\mathrm{pub}}\) denote the number of base-field multiplications needed to compute \(r\delta\) when \(r\in E\) is a generic public constant and \(\delta\in F\), and let \(m_{E,\mathrm{pub}}\) denote the corresponding count when \(\delta\in E\), under the chosen quartic multiplication routine.
+
+\begin{proposition}[Direct fixed-basis baseline]
+\label{prop:baseline}
+Under the same multiplication-dominant model as Proposition~\ref{prop:canon}, the direct fixed-basis update performs
+\[
+M_{\mathrm{dir}}(N)
+=
+\frac{N}{2}\,m_{F,\mathrm{pub}}
++
+\left(\frac{N}{2}-1\right)m_{E,\mathrm{pub}}
+\]
+base-field multiplications on \(F\)-valued leaves. Consequently,
+\[
+\frac{M_{\mathrm{dir}}(N)}{M_{\mathrm{canon}}(N)}
+\longrightarrow
+\frac{m_{F,\mathrm{pub}}+m_{E,\mathrm{pub}}}{4}
+\qquad\text{as }N\to\infty.
+\]
+\end{proposition}
+
+\begin{proof}
+In round \(1\), each pair begins from \(F\)-valued leaves, so \(w_1-w_0\in F\) and the direct update requires \(m_{F,\mathrm{pub}}\) multiplications per pair. There are \(N/2\) such pairs. From round \(2\) onward, each current state is a general element of \(E\), so each surviving pair incurs \(m_{E,\mathrm{pub}}\) multiplications, and the number of such pairs is
+\[
+\sum_{i=2}^{n}\frac{N}{2^i}=\frac{N}{2}-1.
+\]
+Summing the two contributions gives the formula, and the asymptotic ratio follows from Proposition~\ref{prop:canon}.
+\end{proof}
+
+\begin{remark}[Concrete baseline constants]
+The symbolic parameters \(m_{F,\mathrm{pub}}\) and \(m_{E,\mathrm{pub}}\) encapsulate the choice of ambient basis and quartic multiplication routine. Proposition~\ref{prop:baseline} provides the general formulation; any concrete numerical instantiation should be stated relative to an explicitly fixed ambient representation.
+\end{remark}
+
+\section{Implication for Explicit-Row Interfaces}
+
+Theorems~\ref{thm:exact-fold} and \ref{thm:descriptor} identify a concrete backend object for later cryptographic layers: the seed-specialized evaluator \(T_{\tau,n}\) together with its reduced descriptor \(d^{\mathrm{fold}}_{\tau,n}\). A subsequent commitment/opening protocol has two standard interface choices. It can take the structured descriptor directly as input, as in systems designed for structured linear families \cite{CampanelliEtAl2022LMVC,CatalanoFioreTucker2022AHFC,BalbasCatalanoFioreLai2022CFC,FischLiuVesely2024Orbweaver}, or it can explicitly form the four rows of \(T_{\tau,n}\) and use those rows.
+
+The next proposition formalizes the cost of the row-materialization approach.
+
+\begin{proposition}[Explicit-row interfaces preclude descriptor succinctness]
+\label{prop:explicit-row}
+Fix \(\tau\in\Omega^{\mathrm{alg}}\). Let a subsequent opening protocol express the \(k\)-th output coordinate of \(T_{\tau,n}\) as an explicit row vector
+\[
+w_{\tau,n}^{(k)}\in F^N
+\]
+satisfying
+\[
+\langle w_{\tau,n}^{(k)},x\rangle=\big(T_{\tau,n}(x)\big)_k
+\qquad
+\text{for all }x\in F^N.
+\]
+Then necessarily
+\[
+w_{\tau,n}^{(k)}=\lambda_{\tau,n}^{(k)}.
+\]
+Hence any explicit-row specialization to \(\tau\) requires exactly \(4N\) base-field coefficients, whereas the reduced fold descriptor has size \(4(n-1)\) (or \(4n\) in the uniform per-round encoding of Remark~\ref{rem:tight-vs-uniform}).
+\end{proposition}
+
+\begin{proof}
+By definition of the row vectors \(\lambda_{\tau,n}^{(k)}\), we have
+\[
+\langle \lambda_{\tau,n}^{(k)},x\rangle=\big(T_{\tau,n}(x)\big)_k
+\qquad
+\forall x\in F^N.
+\]
+If \(w_{\tau,n}^{(k)}\) is another row vector satisfying the same identity, then
+\[
+\langle w_{\tau,n}^{(k)}-\lambda_{\tau,n}^{(k)},x\rangle=0
+\qquad
+\forall x\in F^N.
+\]
+Taking \(x=e_j^{(N)}\) for each standard basis vector shows
+\[
+w_{\tau,n}^{(k)}[j]=\lambda_{\tau,n}^{(k)}[j]
+\qquad
+\forall j,
+\]
+so the two rows are equal.
+\end{proof}
+
+Proposition~\ref{prop:explicit-row} is an interface statement, not a hardness statement. By Remark~\ref{rem:rows}, the rows can be explicitly formed in linear time from the structured circuit of Theorem~\ref{thm:descriptor}. A row-only interface inevitably replaces a logarithmic-size seed specialization by \(4N\) explicit coefficients. Therefore, any subsequent protocol that wants to preserve the \(O(n)\)-word specialization must take the structured reciprocal descriptor itself, or an equivalent structured representation, as input rather than only explicit row vectors.
+
+\section{Concluding Remarks}
+
+From the perspective of protocol design, the separation established in Proposition~\ref{prop:explicit-row} provides a clear interface contract. A commitment/opening mechanism can exploit the evaluator family's exact width, exact descriptor size, and exact fold arithmetic \cite{CampanelliEtAl2022LMVC,CatalanoFioreTucker2022AHFC,BalbasCatalanoFioreLai2022CFC,FischLiuVesely2024Orbweaver}. Likewise, a Fiat--Shamir or correlated-challenge analysis can treat the reciprocal chart as a fixed algebraic primitive rather than re-deriving its local identities within the security proof \cite{CanettiEtAl2018FS,BlockEtAl2023FRI}. The appendix provides a minimal information-theoretic soundness statement for the evaluator relation in the oracle model.
+
+\appendix
+
+\section{Reciprocal-Shift Coefficient Update}
+
+\begin{proposition}[Reciprocal-shift minimal-polynomial update]
+\label{prop:coeff-update}
+Let
+\[
+m_i(X)=X^4-\mu_{i,3}X^3-\mu_{i,2}X^2-\mu_{i,1}X-\mu_{i,0}
+\]
+be the monic minimal polynomial of \(r_i\), fix \(c\in\{0,1\}\), and define
+\[
+D_c(\mu_i):=m_i(c)=c^4-\mu_{i,3}c^3-\mu_{i,2}c^2-\mu_{i,1}c-\mu_{i,0}.
+\]
+Then \(D_c(\mu_i)\neq 0\), and the next orbit point
+\[
+r_{i+1}=\frac{1}{r_i-c}
+\]
+has monic minimal polynomial
+\[
+m_{i+1}(Y)=\frac{Y^4m_i(c+Y^{-1})}{D_c(\mu_i)}.
+\]
+Equivalently,
+\[
+m_{i+1}(Y)=Y^4-\mu_{i+1,3}Y^3-\mu_{i+1,2}Y^2-\mu_{i+1,1}Y-\mu_{i+1,0},
+\]
+where
+\[
+\mu_{i+1,0}=-D_c(\mu_i)^{-1},
+\qquad
+\mu_{i+1,1}=(\mu_{i,3}-4c)D_c(\mu_i)^{-1},
+\]
+\[
+\mu_{i+1,2}=(\mu_{i,2}+3c\mu_{i,3}-6c^2)D_c(\mu_i)^{-1},
+\]
+\[
+\mu_{i+1,3}=(\mu_{i,1}+2c\mu_{i,2}+3c^2\mu_{i,3}-4c^3)D_c(\mu_i)^{-1}.
+\]
+\end{proposition}
+
+\begin{proof}
+Because \(m_i\) is irreducible of degree \(4\) over \(F\), it has no root in \(F\). Hence \(D_c(\mu_i)=m_i(c)\neq 0\) for every \(c\in F\), in particular for \(c\in\{0,1\}\).
+
+Define
+\[
+\widetilde m(Y):=\frac{Y^4m_i(c+Y^{-1})}{D_c(\mu_i)}\in F[Y].
+\]
+Substituting \(Y=r_{i+1}\) gives
+\[
+\widetilde m(r_{i+1})
+=
+\frac{r_{i+1}^4 m_i(c+r_{i+1}^{-1})}{D_c(\mu_i)}
+=
+\frac{r_{i+1}^4 m_i(r_i)}{D_c(\mu_i)}
+=0,
+\]
+so \(\widetilde m\) annihilates \(r_{i+1}\). Moreover, the coefficient of \(Y^4\) in \(Y^4m_i(c+Y^{-1})\) is precisely \(m_i(c)=D_c(\mu_i)\), so \(\widetilde m\) is a monic polynomial of degree \(4\).
+
+The M\"obius relations
+\[
+r_i=c+r_{i+1}^{-1},
+\qquad
+r_{i+1}=(r_i-c)^{-1}
+\]
+show that \(r_i\in F(r_{i+1})\) and \(r_{i+1}\in F(r_i)\). Therefore
+\[
+F(r_{i+1})=F(r_i)=E,
+\]
+so the minimal polynomial of \(r_{i+1}\) over \(F\) has degree \(4\). Since \(\widetilde m\) is already a monic degree-\(4\) polynomial annihilating \(r_{i+1}\), it must equal the minimal polynomial \(m_{i+1}\).
+
+It remains to expand. A direct computation gives
+\[
+Y^4m_i(c+Y^{-1})
+=
+D_c(\mu_i)Y^4
++
+\bigl(4c^3-3c^2\mu_{i,3}-2c\mu_{i,2}-\mu_{i,1}\bigr)Y^3
+\]
+\[
+\qquad
++
+\bigl(6c^2-3c\mu_{i,3}-\mu_{i,2}\bigr)Y^2
++
+\bigl(4c-\mu_{i,3}\bigr)Y
++1.
+\]
+Dividing by \(D_c(\mu_i)\) and comparing with the monic quartic form
+\[
+Y^4-\mu_{i+1,3}Y^3-\mu_{i+1,2}Y^2-\mu_{i+1,1}Y-\mu_{i+1,0}
+\]
+yields exactly the displayed coefficient formulas.
+\end{proof}
+
+\section{Information-Theoretic Oracle-Model Soundness}
+\label{sec:it-soundness}
+
+This section establishes an information-theoretic soundness theorem for the evaluator relation
+\[
+\mathcal R_{\tau,n}:=\{(x,y)\in F^N\times F^4 : y=T_{\tau,n}(x)\}.
+\]
+The main result is the following:
+\begin{quote}
+Suppose that (i) the prover's claimed output $y\in F^4$ is fixed before a random scalarization vector $\rho\in F^4$ is drawn, (ii) the sumcheck phase uses fresh, independent verifier challenges in $F$, and (iii) the verifier has exact access to $\widetilde x(z)$ at the final sampled point $z$. Then a false relation claim $y\neq T_{\tau,n}(x)$ is accepted with probability at most $(2n+1)/q$.
+\end{quote}
+The same section also explains why the more naive deterministic-orbit transcript is completely unsound. The error bound is nontrivial in the natural regime $q\gg n$; its leading $1/q$ term reflects the unavoidable collision probability of a single random scalarization.
+
+\subsection{Setup}
+
+Throughout this section, the protocol-level probability bounds rely only on the finite-field assumptions
+\[
+F=\mathbb F_q,
+\qquad
+N=2^n,
+\quad n\ge 1.
+\]
+To instantiate the specific reciprocal evaluator of this paper, we further assume
+\[
+E=\mathbb F_{q^4},
+\qquad
+\operatorname{char}(F)>3,
+\]
+fix a seed $\tau\in E$ with $F(\tau)=E$, and let
+\[
+r_1=\tau,
+\qquad
+r_{i+1}=\frac{1}{r_i-c_i},
+\qquad
+c_i=
+\begin{cases}
+0,& i\text{ odd},\\
+1,& i\text{ even}.
+\end{cases}
+\]
+As established in the algebraic sections above, every orbit point satisfies $F(r_i)=E$; in particular,
+\[
+r_i\notin F,
+\qquad\text{hence}\qquad
+r_i\notin\{0,1\}
+\]
+for every round $i$.
+
+We retain the reduced-descriptor notation introduced earlier for the evaluator
+\[
+T_{\tau,n}:F^N\to F^4.
+\]
+In this notation, the first round is represented by the fixed branch vectors
+\[
+\nu^{(0)}=(0,0,-1,1)^\top,
+\qquad
+\nu^{(1)}=(0,0,1,0)^\top,
+\]
+and every later round $i\ge 2$ is represented by the branch matrices
+\[
+M_i^{(0)},
+\qquad
+M_i^{(1)}.
+\]
+For a bit string $b=(b_1,\dots,b_n)\in\{0,1\}^n$, define
+\[
+w_{\tau,\rho}(b):=
+\begin{cases}
+\rho^\top\nu^{(b_1)},& n=1,\\[0.5ex]
+\rho^\top M_n^{(b_n)}\cdots M_2^{(b_2)}\nu^{(b_1)},& n\ge 2,
+\end{cases}
+\]
+for every scalarization vector $\rho\in F^4$.
+
+For $u=(u_1,\dots,u_n)\in F^n$, define the affine interpolants
+\[
+\overline\nu(u_1):=(1-u_1)\nu^{(0)}+u_1\nu^{(1)},
+\]
+and, for $i\ge 2$,
+\[
+\overline M_i(u_i):=(1-u_i)M_i^{(0)}+u_iM_i^{(1)}.
+\]
+Then define the associated multilinear weight polynomial by
+\[
+\widetilde w_{\tau,\rho}(u):=
+\begin{cases}
+\rho^\top\overline\nu(u_1),& n=1,\\[0.5ex]
+\rho^\top\overline M_n(u_n)\cdots \overline M_2(u_2)\overline\nu(u_1),& n\ge 2.
+\end{cases}
+\]
+Finally, identify every vector $x\in F^N$ with a function
+\[
+x:\{0,1\}^n\to F,
+\qquad
+b\longmapsto x_b,
+\]
+and let
+\[
+\widetilde x\in F[U_1,\dots,U_n]
+\]
+denote its multilinear extension.
+
+\begin{lemma}[Descriptor interpolation]
+\label{lem:it-descriptor-interpolation}
+For every $b\in\{0,1\}^n$,
+\[
+\widetilde w_{\tau,\rho}(b)=w_{\tau,\rho}(b).
+\]
+Moreover, $\widetilde w_{\tau,\rho}$ is multilinear in each variable, and for every point $u\in F^n$ its value $\widetilde w_{\tau,\rho}(u)$ is computable from $(d^{\mathrm{fold}}_{\tau,n},\rho)$ in $O(n)$ base-field operations.
+\end{lemma}
+
+\begin{proof}
+At a Boolean point $b\in\{0,1\}^n$, every affine factor reduces to the branch that the corresponding bit selects:
+\[
+\overline\nu(b_1)=\nu^{(b_1)},
+\qquad
+\overline M_i(b_i)=M_i^{(b_i)}\quad(i\ge 2).
+\]
+Substituting these identities into the definition of $\widetilde w_{\tau,\rho}$ gives exactly the branch-product formula for $w_{\tau,\rho}(b)$.
+
+Multilinearity is immediate because each factor depends affinely on its own variable and is independent of the others. For evaluation cost, fix $u\in F^n$ and $\rho\in F^4$. Computing $\widetilde w_{\tau,\rho}(u)$ then reduces to multiplying $n-1$ constant-size matrices into a constant-size vector and taking a final dot product with $\rho$. Each step costs $O(1)$ field operations, giving \(O(n)\) in total.
+\end{proof}
+
+\begin{lemma}[Scalarization identity]
+\label{lem:it-scalarization}
+For every $x\in F^N$ and every $\rho\in F^4$,
+\[
+\langle \rho,T_{\tau,n}(x)\rangle
+=
+\sum_{b\in\{0,1\}^n} x_b\,w_{\tau,\rho}(b)
+=
+\sum_{b\in\{0,1\}^n} \widetilde x(b)\,\widetilde w_{\tau,\rho}(b).
+\]
+\end{lemma}
+
+\begin{proof}
+Write
+\[
+x=\sum_{b\in\{0,1\}^n} x_b e_b,
+\]
+where $e_b\in F^N$ denotes the standard basis vector indexed by $b$. By linearity of $T_{\tau,n}$,
+\[
+T_{\tau,n}(x)=\sum_{b\in\{0,1\}^n} x_b T_{\tau,n}(e_b).
+\]
+Applying $\rho^\top$ yields
+\[
+\langle \rho,T_{\tau,n}(x)\rangle
+=
+\sum_{b\in\{0,1\}^n} x_b\,\rho^\top T_{\tau,n}(e_b)
+=
+\sum_{b\in\{0,1\}^n} x_b\,w_{\tau,\rho}(b).
+\]
+The second equality follows because $\widetilde x(b)=x_b$ at Boolean points and because Lemma~\ref{lem:it-descriptor-interpolation} gives $\widetilde w_{\tau,\rho}(b)=w_{\tau,\rho}(b)$.
+\end{proof}
+
+\subsection{The deterministic-orbit transcript is completely unsound}
+
+Fix $x\in F^N$ and $\rho\in F^4$, and define
+\[
+H_{\tau,\rho}(u):=\widetilde x(u)\,\widetilde w_{\tau,\rho}(u)
+\in F[U_1,\dots,U_n].
+\]
+Because both factors are multilinear, $H_{\tau,\rho}$ has individual degree at most $2$ in every variable. Since its coefficients lie in $F\subseteq E$, it can equally be evaluated at points in $E^n$.
+
+Consider the following deterministic-orbit protocol for the claim
+\[
+\sum_{b\in\{0,1\}^n} H_{\tau,\rho}(b)=\alpha_0.
+\]
+The verifier uses the public orbit points $r_1,\dots,r_n\in E$ as its round challenges. At round $i$, the prover sends a polynomial $g_i(T)\in E[T]$ of degree at most $2$ satisfying
+\[
+g_i(0)+g_i(1)=\alpha_{i-1},
+\]
+and the verifier sets
+\[
+\alpha_i:=g_i(r_i).
+\]
+At the end, the verifier accepts if and only if
+\[
+\alpha_n=H_{\tau,\rho}(r_1,\dots,r_n).
+\]
+
+\begin{theorem}[Complete unsoundness of the deterministic-orbit transcript]
+\label{thm:it-deterministic-unsound}
+For every false initial claim $\alpha_0\in E$, there exists a cheating prover that makes the deterministic-orbit protocol above accept with probability $1$.
+\end{theorem}
+
+\begin{proof}
+Fix any sequence of target intermediate claims
+\[
+\alpha_1,\dots,\alpha_{n-1}\in E,
+\qquad
+\alpha_n:=H_{\tau,\rho}(r_1,\dots,r_n).
+\]
+It is enough to show that, for every round $i$, any pair $(\alpha_{i-1},\alpha_i)\in E^2$ can be achieved by some degree-$\le 2$ polynomial $g_i(T)$ satisfying
+\[
+g_i(0)+g_i(1)=\alpha_{i-1},
+\qquad
+g_i(r_i)=\alpha_i.
+\]
+Consider a polynomial of the form
+\[
+g_i(T)=a_iT^2+b_iT.
+\]
+The two required conditions amount to the linear system
+\[
+a_i+b_i=\alpha_{i-1},
+\qquad
+a_i r_i^2+b_i r_i=\alpha_i.
+\]
+Its determinant is
+\[
+\det\begin{pmatrix}1&1\\ r_i^2&r_i\end{pmatrix}=r_i-r_i^2=r_i(1-r_i),
+\]
+which is nonzero because $r_i\notin\{0,1\}$, so the system has a unique solution $(a_i,b_i)\in E^2$ and every round constraint can be met exactly.
+
+By construction, the final claim is set to equal the value the verifier computes in its final check. Therefore every round check and the final check pass, even though the initial claim $\alpha_0$ was false. The verifier accepts with probability $1$.
+\end{proof}
+
+\begin{remark}
+This pathology requires nothing from the quartic structure except that the reused challenges satisfy $r_i\notin\{0,1\}$. The quartic reciprocal orbit simply provides a concrete deterministic family of such non-Boolean challenges.
+\end{remark}
+
+\subsection{The idealized oracle-model protocol}
+
+The positive result concerns a \emph{different} protocol with three key changes. First, the prover sends its claimed output before seeing $\rho$. Second, the sumcheck rounds use fresh independent challenges drawn from $F$. Third, the verifier requires only the exact value $\widetilde x(z)$ at the final evaluation point $z\in F^n$.
+
+For a fixed input $x\in F^N$, the protocol is:
+\begin{enumerate}[label=\arabic*.]
+\item The prover outputs a claimed evaluator output
+\[
+y\in F^4.
+\]
+This first message is sent before the verifier reveals $\rho$.
+\item The verifier samples
+\[
+\rho\leftarrow F^4
+\]
+uniformly at random and sets
+\[
+\beta_0:=\langle \rho,y\rangle.
+\]
+\item The verifier defines
+\[
+H_{\tau,\rho}(u):=\widetilde x(u)\,\widetilde w_{\tau,\rho}(u).
+\]
+\item The prover and verifier run the standard $n$-round sumcheck protocol for the claim
+\[
+\sum_{b\in\{0,1\}^n} H_{\tau,\rho}(b)=\beta_0.
+\]
+At round $i$ the prover, who has seen $\rho$ and the earlier challenges $z_1,\dots,z_{i-1}$, sends a polynomial $h_i(T)\in F[T]$. The verifier checks that $\deg h_i\le 2$ and that
+\[
+h_1(0)+h_1(1)=\beta_0
+\]
+at the first round, and
+\[
+h_i(0)+h_i(1)=h_{i-1}(z_{i-1})
+\]
+for each later round. The verifier then samples
+\[
+z_i\leftarrow F
+\]
+uniformly and independently.
+\item At the final point $z=(z_1,\dots,z_n)\in F^n$, the verifier queries the exact value $\widetilde x(z)$ and checks
+\[
+h_n(z_n)=H_{\tau,\rho}(z)=\widetilde x(z)\,\widetilde w_{\tau,\rho}(z).
+\]
+\end{enumerate}
+Concretely, the prover transmits $h_i$ as its three coefficients in $F$, so the degree bound $\deg h_i\le 2$ is enforced syntactically.
+
+\begin{lemma}[Standard degree-$2$ sumcheck soundness]
+\label{lem:it-sumcheck}
+Let
+\[
+H\in F[U_1,\dots,U_n]
+\]
+be any polynomial of individual degree at most $2$ in every variable. Consider the standard $n$-round sumcheck protocol for the claim
+\[
+\sum_{b\in\{0,1\}^n} H(b)=\beta_0,
+\]
+with verifier checks $\deg h_i\le 2$ at every round and with oracle access to $H(z_1,\dots,z_n)$ at the final evaluation point. Then every adaptive prover whose initial claim satisfies
+\[
+\beta_0\neq\sum_{b\in\{0,1\}^n} H(b)
+\]
+is accepted with probability at most $2n/q$.
+\end{lemma}
+
+\begin{proof}
+We argue by induction on $n$.
+
+For $n=1$, the verifier checks
+\[
+h_1(0)+h_1(1)=\beta_0
+\]
+and finally checks $h_1(z_1)=H(z_1)$. Since the initial claim is false,
+\[
+\beta_0\neq H(0)+H(1).
+\]
+Therefore any first-round polynomial $h_1$ satisfying the verifier's consistency equation must differ from $H$. Hence
+\[
+q_1(T):=h_1(T)-H(T)
+\]
+is a nonzero polynomial of degree at most $2$. Acceptance implies $q_1(z_1)=0$, which occurs with probability at most $2/q$.
+
+Assume now that the statement holds for $(n-1)$ variables, and consider an $n$-variable instance. Define the true first-round partial-sum polynomial
+\[
+p_1(T):=\sum_{b_2,\dots,b_n\in\{0,1\}^{n-1}} H(T,b_2,\dots,b_n).
+\]
+Because $H$ has individual degree at most $2$, the univariate polynomial $p_1$ has degree at most $2$. Since the initial claim is false,
+\[
+p_1(0)+p_1(1)=\sum_{b\in\{0,1\}^n} H(b)\neq\beta_0.
+\]
+Thus any first-round prover message $h_1$ satisfying
+\[
+h_1(0)+h_1(1)=\beta_0
+\]
+must differ from $p_1$. Let
+\[
+q_1(T):=h_1(T)-p_1(T),
+\]
+so $q_1$ is a nonzero polynomial of degree at most $2$.
+
+The verifier next samples $z_1\leftarrow F$. If $q_1(z_1)=0$, then the residual claim may become true; in this case we pessimistically bound the conditional acceptance probability by $1$. Since $q_1$ has at most $2$ roots,
+\[
+\Pr[q_1(z_1)=0]\le \frac{2}{q}.
+\]
+On the complementary event $q_1(z_1)\neq 0$, the residual claim for the specialized polynomial
+\[
+H(z_1,U_2,\dots,U_n)
+\]
+is still false, because the prover's carried-forward value is $h_1(z_1)$ while the true partial sum evaluates to $p_1(z_1)$. The continuation is therefore a standard $(n-1)$-round sumcheck instance, and its target polynomial still has individual degree at most $2$. By the induction hypothesis, conditioned on $q_1(z_1)\neq 0$, the remaining acceptance probability is at most $2(n-1)/q$.
+
+Combining the two cases gives
+\[
+\Pr[\text{accept}]
+\le
+\Pr[q_1(z_1)=0]\cdot 1
++
+\Pr[q_1(z_1)\neq 0]\cdot \frac{2(n-1)}{q}
+\le
+\frac{2}{q}+\frac{2(n-1)}{q}
+=
+\frac{2n}{q}.
+\]
+This completes the induction.
+\end{proof}
+
+\begin{proposition}[Why $y$ must be fixed before scalarization]
+\label{prop:it-pre-rho-needed}
+If the prover is allowed to choose $y$ after seeing $\rho\in F^4$, then the scalarization check alone provides no guarantees: for every $x\in F^N$ and every $\rho\in F^4$, there exists a vector
+\[
+y\neq T_{\tau,n}(x)
+\]
+such that
+\[
+\langle \rho,y\rangle=\langle \rho,T_{\tau,n}(x)\rangle.
+\]
+\end{proposition}
+
+\begin{proof}
+Choose any nonzero vector
+\[
+\delta\in\{v\in F^4 : \langle \rho,v\rangle=0\}.
+\]
+Such a nonzero vector always exists: if $\rho=0$, the orthogonal subspace is all of $F^4$, and if $\rho\neq 0$, the orthogonal complement $\rho^\perp$ has dimension $3$. Set
+\[
+y:=T_{\tau,n}(x)+\delta.
+\]
+Then $y\neq T_{\tau,n}(x)$ but
+\[
+\langle \rho,y\rangle
+=
+\langle \rho,T_{\tau,n}(x)\rangle+\langle \rho,\delta\rangle
+=
+\langle \rho,T_{\tau,n}(x)\rangle.
+\]
+Therefore no one-shot scalarization test can certify the vector equality $y=T_{\tau,n}(x)$ unless $y$ is fixed before $\rho$ is sampled.
+\end{proof}
+
+\begin{proposition}[Fresh scalarization alone does not repair the deterministic-orbit protocol]
+\label{prop:it-rho-alone-not-enough}
+Suppose the verifier samples $\rho\leftarrow F^4$ uniformly at random but still reuses the public orbit points $r_1,\dots,r_n$ as its round challenges. Then the resulting protocol remains completely unsound.
+\end{proposition}
+
+\begin{proof}
+Fix any false output claim $y\neq T_{\tau,n}(x)$, and let
+\[
+\Delta:=y-T_{\tau,n}(x)\neq 0.
+\]
+For each realized value of $\rho$, there are two cases.
+
+If $\langle \rho,\Delta\rangle=0$, then the scalarized initial claim
+\[
+\langle \rho,y\rangle=\langle \rho,T_{\tau,n}(x)\rangle
+\]
+is actually true. In this case the deterministic-orbit transcript passes all verifier checks.
+
+If instead $\langle \rho,\Delta\rangle\neq 0$, then the scalarized initial claim is false. But Theorem~\ref{thm:it-deterministic-unsound} shows that, for the deterministic-orbit protocol, the prover can still force acceptance with probability $1$.
+
+Thus for every realization of $\rho$ there exists an accepting prover strategy, so fresh scalarization without fresh verifier challenges does not restore soundness.
+\end{proof}
+
+\begin{theorem}[Information-theoretic oracle-model one-shot soundness]
+\label{thm:it-oracle-soundness}
+Consider the idealized protocol above. Let $P^\star$ be any possibly randomized prover that, on input $x\in F^N$, first outputs a vector $y\in F^4$ before $\rho$ is sampled, and then responds adaptively in the sumcheck phase, seeing each verifier challenge $z_j$ in turn. Then
+\[
+\Pr\big[\text{verifier accepts and }y\neq T_{\tau,n}(x)\big]
+\le
+\min\!\left\{1,\frac{2n+1}{q}\right\}.
+\]
+Here the probability is over $P^\star$'s internal coins and the uniform verifier randomness $(\rho,z_1,\dots,z_n)$.
+\end{theorem}
+
+\begin{proof}
+Let $\omega$ denote the internal coins of $P^\star$, and fix an arbitrary realization of $\omega$. With $\omega$ fixed, the prover is deterministic. Let $y=y(\omega)$ be its first message, and define
+\[
+\Delta:=y-T_{\tau,n}(x)\in F^4.
+\]
+If $\Delta=0$, then the bad event
+\[
+\{\text{verifier accepts and } y\neq T_{\tau,n}(x)\}
+\]
+is impossible, so there is nothing to prove. Assume from now on that $\Delta\neq 0$.
+
+Because $y$ is determined before $\rho$ is drawn, $\Delta$ does not depend on $\rho$. For nonzero $\Delta$, the map
+\[
+\rho\longmapsto \langle \rho,\Delta\rangle
+\]
+is a nonzero linear functional on the $4$-dimensional $F$-vector space $F^4$, and therefore its kernel has cardinality $q^3$. Consequently,
+\[
+\Pr_{\rho}\big[\langle \rho,\Delta\rangle=0\big]=\frac{1}{q}.
+\]
+Let
+\[
+\mathsf{Coll}:=\{\langle \rho,\Delta\rangle=0\}.
+\]
+On the complementary event $\neg\mathsf{Coll}$, we have
+\[
+\beta_0=\langle \rho,y\rangle\neq \langle \rho,T_{\tau,n}(x)\rangle.
+\]
+By Lemma~\ref{lem:it-scalarization},
+\[
+\langle \rho,T_{\tau,n}(x)\rangle
+=
+\sum_{b\in\{0,1\}^n} \widetilde x(b)\,\widetilde w_{\tau,\rho}(b)
+=
+\sum_{b\in\{0,1\}^n} H_{\tau,\rho}(b).
+\]
+Thus, for any fixed $\rho$ outside $\mathsf{Coll}$, the claimed sum $\beta_0$ differs from the true sum of $H_{\tau,\rho}$, so the prover faces a false sumcheck instance.
+
+Fix any $\rho$ outside $\mathsf{Coll}$. By construction, both $\widetilde x$ and $\widetilde w_{\tau,\rho}$ are multilinear, so their product $H_{\tau,\rho}$ has individual degree at most $2$ in each variable. Therefore Lemma~\ref{lem:it-sumcheck} applies and gives
+\[
+\Pr[\text{accept}\mid \omega,\rho,\neg\mathsf{Coll}]\le \frac{2n}{q}.
+\]
+Bounding the acceptance probability by $1$ on the event $\mathsf{Coll}$, we obtain
+\[
+\Pr[\text{accept and }\Delta\neq 0\mid \omega]
+\le
+\Pr[\mathsf{Coll}\mid \omega]
++
+\Pr[\text{accept}\mid \omega,\neg\mathsf{Coll}]
+\le
+\frac{1}{q}+\frac{2n}{q}
+=
+\frac{2n+1}{q}.
+\]
+Since the same bound holds for every fixed value of $\omega$, averaging over $\omega$ preserves the inequality. Finally, taking the minimum with $1$ gives the stated bound.
+\end{proof}
+
+\begin{remark}[Interpreting the error term]
+The bound is nontrivial whenever $q\gg n$, which is the regime of practical interest. The two summands reflect distinct sources of error: the additive $1/q$ term is the unavoidable collision probability of the one-shot random scalarization map
+\[
+v\longmapsto \langle \rho,v\rangle,
+\]
+while the remaining $2n/q$ term comes from the $n$ rounds of degree-$2$ sumcheck.
+\end{remark}
+
+\begin{remark}[Exact scope of the theorem]
+\label{rem:it-scope}
+Theorem~\ref{thm:it-oracle-soundness} is a \emph{one-shot}, information-theoretic soundness statement in the oracle model: it assumes that the prover outputs $y$ before $\rho$ is sampled and bounds the error for a single evaluator-relation check $y=T_{\tau,n}(x)$.
+
+Extensions to concrete polynomial commitments, adaptive multi-query opening, and Fiat--Shamir or correlated-challenge non-interactive compilation are separate layers that build on this core guarantee.
+\end{remark}
+
+\begin{thebibliography}{99}
+
+\bibitem{BalbasCatalanoFioreLai2022CFC}
+David Balb\'as, Dario Catalano, Dario Fiore, and Russell W.~F. Lai.
+\newblock Chainable Functional Commitments for Unbounded-Depth Circuits.
+\newblock \emph{IACR Cryptology ePrint Archive}, Paper 2022/1365, 2022.
+
+\bibitem{BagadDombThaler2024SmallChar}
+Suyash Bagad, Yuval Domb, and Justin Thaler.
+\newblock The Sum-Check Protocol over Fields of Small Characteristic.
+\newblock \emph{IACR Cryptology ePrint Archive}, Paper 2024/1046, 2024.
+
+\bibitem{BlockEtAl2023FRI}
+Alexander R. Block, Albert Garreta, Jonathan Katz, Justin Thaler, Pratyush Ranjan Tiwari, and Micha\l{} Zaj\k{a}c.
+\newblock Fiat-Shamir Security of {FRI} and Related {SNARKs}.
+\newblock \emph{IACR Cryptology ePrint Archive}, Paper 2023/1071, 2023.
+
+\bibitem{BootleChiesaSotiraki2021}
+Jonathan Bootle, Alessandro Chiesa, and Katerina Sotiraki.
+\newblock Sumcheck Arguments and their Applications.
+\newblock \emph{IACR Cryptology ePrint Archive}, Paper 2021/333, 2021.
+
+\bibitem{CampanelliEtAl2022LMVC}
+Matteo Campanelli, Anca Nitulescu, Carla R\`afols, Alexandros Zacharakis, and Arantxa Zapico.
+\newblock Linear-Map Vector Commitments and their Practical Applications.
+\newblock In \emph{ASIACRYPT 2022}. Full version: \emph{IACR Cryptology ePrint Archive}, Paper 2022/705.
+
+\bibitem{BuenzChen2023ProtoStar}
+Benedikt B\"unz and Binyi Chen.
+\newblock ProtoStar: Generic Efficient Accumulation/Folding for Special Sound Protocols.
+\newblock \emph{IACR Cryptology ePrint Archive}, Paper 2023/620, 2023.
+
+\bibitem{CanettiEtAl2018FS}
+Ran Canetti, Yilei Chen, Justin Holmgren, Alex Lombardi, Guy N. Rothblum, and Ron D. Rothblum.
+\newblock Fiat-Shamir From Simpler Assumptions.
+\newblock \emph{IACR Cryptology ePrint Archive}, Paper 2018/1004, 2018.
+
+\bibitem{CatalanoFioreTucker2022AHFC}
+Dario Catalano, Dario Fiore, and Ida Tucker.
+\newblock Additive-Homomorphic Functional Commitments and Applications to Homomorphic Signatures.
+\newblock In \emph{ASIACRYPT 2022}. Full version: \emph{IACR Cryptology ePrint Archive}, Paper 2022/1331.
+
+\bibitem{FischLiuVesely2024Orbweaver}
+Ben Fisch, Zeyu Liu, and Psi Vesely.
+\newblock Orbweaver: Succinct Linear Functional Commitments from Lattices.
+\newblock \emph{IACR Cryptology ePrint Archive}, Paper 2024/2026, 2024.
+
+\bibitem{KothapalliSetty2023HyperNova}
+Abhiram Kothapalli and Srinath Setty.
+\newblock HyperNova: Recursive Arguments for Customizable Constraint Systems.
+\newblock \emph{IACR Cryptology ePrint Archive}, Paper 2023/573, 2023.
+
+\bibitem{KothapalliSettyTzialla2021Nova}
+Abhiram Kothapalli, Srinath Setty, and Ioanna Tzialla.
+\newblock Nova: Recursive Zero-Knowledge Arguments from Folding Schemes.
+\newblock \emph{IACR Cryptology ePrint Archive}, Paper 2021/370, 2021.
+
+\bibitem{LFKN92}
+Carsten Lund, Lance Fortnow, Howard Karloff, and Noam Nisan.
+\newblock Algebraic Methods for Interactive Proof Systems.
+\newblock \emph{Journal of the ACM}, 39(4):859--868, 1992.
+
+\bibitem{Rothblum2024MLENote}
+Ron D. Rothblum.
+\newblock A Note on Efficient Computation of the Multilinear Extension.
+\newblock \emph{IACR Cryptology ePrint Archive}, Paper 2024/1103, 2024.
+
+\end{thebibliography}
+
+\end{document}
