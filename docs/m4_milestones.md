@@ -2,8 +2,8 @@
 
 ## Goal
 
-Build the reciprocal backend into a real KZG descriptor-opening library and wire
-that path into the current Sonobe-derived integration flow.
+Build the reciprocal backend into a real KZG descriptor-opening library and
+integrate it into the current Sonobe-derived flow.
 
 This milestone plan is implementation-focused. The deliverables are code,
 integration paths, tests, and demo artifacts.
@@ -33,9 +33,9 @@ integration paths, tests, and demo artifacts.
 
 ### Build
 
-- wire the KZG-backed reciprocal proof path into the current adapter flow
-- replace the current PoC opening boundary in the example and integration paths
-- update integration tests so they exercise the new library path directly
+- integrate the KZG-backed reciprocal proof path into the current adapter flow
+- replace the current PoC opening path in the example and integration flows
+- update integration tests to cover the new library path directly
 
 ### Deliverables
 
@@ -46,7 +46,7 @@ integration paths, tests, and demo artifacts.
 ### Acceptance
 
 - reciprocal statements are generated through the new library path
-- integration tests exercise the new proof path directly
+- integration tests cover the new proof path directly
 - malformed output, wrong descriptor, and wrong opening are rejected inside the integrated path
 - the example runner demonstrates the new flow end to end
 
@@ -55,7 +55,7 @@ integration paths, tests, and demo artifacts.
 ### Build
 
 - implement a real aggregation path for the `F^4` reciprocal outputs
-- make the aggregated reciprocal object the default artifact produced by the example and test paths
+- make examples and tests produce the aggregated reciprocal object by default
 
 ### Deliverables
 
@@ -65,17 +65,17 @@ integration paths, tests, and demo artifacts.
 
 ### Acceptance
 
-- the verifier consumes an aggregated reciprocal proof object rather than ad hoc helper outputs
+- the verifier consumes an aggregated reciprocal proof object instead of separate helper outputs
 - the example and tests use the aggregated path by default
 
 ## M4. Decider Hardening and Grant Demo Package
 
 ### Build
 
-- upgrade the current helper-style offchain decider into a library entry point over the aggregated proof object
-- connect aggregation, opening checks, and fold linkage in one verifier path
+- upgrade the current offchain decider helper into a library entry point over the aggregated proof object
+- unify aggregation checks, opening checks, and fold-linkage checks into a single verifier path
 - refresh the benchmark package around the KZG-backed path
-- rerun the naive-versus-specialized comparison with the updated backend path
+- rerun the comparison between the naive baseline and the specialized path on the updated backend
 - prepare reviewer-facing run instructions and a clean end-to-end demo flow
 
 ### Deliverables
@@ -88,6 +88,6 @@ integration paths, tests, and demo artifacts.
 ### Acceptance
 
 - one decider entry point checks relation consistency, opening consistency, and fold linkage
-- a reviewer can run the main demo flow from the repository without extra interpretation
+- a reviewer can run the main demo flow from the repository without additional setup or explanation
 - the checked-in benchmark snapshot reflects the KZG-backed path
-- the repo clearly shows which code is the library, which path is the integration flow, and which artifacts are benchmark outputs
+- the repo clearly separates library code, integration paths, and benchmark artifacts
